@@ -1,0 +1,38 @@
+# Dev environment: PostgreSQL + FastAPI backend + React frontend
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: cityhospital
+      POSTGRES_PASSWORD: cityhospital
+      POSTGRES_DB: cityhospital
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

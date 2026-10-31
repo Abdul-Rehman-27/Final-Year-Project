@@ -1,0 +1,2 @@
+# Only needed when DATABASE_URL points to PostgreSQL (not for SQLite)
+psycopg2-binary>=2.9.10

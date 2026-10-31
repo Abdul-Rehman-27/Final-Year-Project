@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-white font-sans text-ink antialiased;
+  }
+  /* Urdu: switch to a Nastaliq font and add line height */
+  html[lang="ur"] body {
+    @apply font-urdu leading-loose;
+  }
+  input::placeholder {
+    @apply text-ink-muted/60;
+  }
+}
