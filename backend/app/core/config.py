@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     CORS_ORIGINS: str = "http://localhost:5173"
+    MEDICAL_ASSISTANT_URL: str = "http://localhost:8010"
+    MEDICAL_ASSISTANT_API_KEY: str = ""
+    GROQ_MONTHLY_TOKEN_LIMIT: int = 0
 
     SEED_ADMIN_EMAIL: str = "admin@cityhospital.pk"
     SEED_ADMIN_PASSWORD: str = "Admin@12345"

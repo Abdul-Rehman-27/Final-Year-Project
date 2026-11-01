@@ -46,6 +46,10 @@ class NewConversation(BaseModel):
 class MessageRequest(BaseModel):
     patient_id: str = Field(min_length=1, max_length=128)
     message: str = Field(min_length=1, max_length=settings.MAX_MESSAGE_CHARS)
+    provider: str = Field(default="groq", pattern="^(groq|ollama)$")
+    groq_model: str | None = Field(default=None, max_length=160)
+    ollama_model: str | None = Field(default=None, max_length=160)
+    auto_fallback: bool = True
 
 
 class PatientRecord(BaseModel):
@@ -352,7 +356,7 @@ async def send_message(conversation_id: str, payload: MessageRequest, request: R
             if facts:
                 evidence = "\n".join(f"{fact['category']}: {fact['content']}" for fact in facts)
                 try:
-                    result = await chat([{"role": "system", "content": f"Answer the patient's question only from these verified records. Use the same language and writing style as the patient. If the records do not answer it, state that clearly. Do not add instructions, dates, medicines, or interpretations not present in the records.\n\nVerified records:\n{evidence}"}, {"role": "user", "content": user_text}])
+                    result = await chat([{"role": "system", "content": f"Answer the patient's question only from these verified records. Use the same language and writing style as the patient. If the records do not answer it, state that clearly. Do not add instructions, dates, medicines, or interpretations not present in the records.\n\nVerified records:\n{evidence}"}, {"role": "user", "content": user_text}], provider=payload.provider, groq_model=payload.groq_model, ollama_model=payload.ollama_model, auto_fallback=payload.auto_fallback)
                     answer = result["text"]
                 except Exception:
                     answer = evidence
@@ -365,7 +369,7 @@ async def send_message(conversation_id: str, payload: MessageRequest, request: R
         language_note = {"role": "system", "content": f"The patient's latest message is in {LANGUAGE_NAMES[language]}. Write every text value only in that language and script. Return JSON only."}
         messages = [{"role": "system", "content": REPLY_SYSTEM_PROMPT}, {"role": "system", "content": f"Verified records for this patient (use only when relevant):\n{evidence}"}, *previous, language_note]
         try:
-            model_task = asyncio.create_task(chat(messages, max_tokens=2000, json_mode=True))
+            model_task = asyncio.create_task(chat(messages, max_tokens=2000, json_mode=True, provider=payload.provider, groq_model=payload.groq_model, ollama_model=payload.ollama_model, auto_fallback=payload.auto_fallback))
             while not model_task.done():
                 done, _ = await asyncio.wait({model_task}, timeout=0.15)
                 if not done and await request.is_disconnected():
@@ -386,14 +390,21 @@ async def send_message(conversation_id: str, payload: MessageRequest, request: R
         conn.execute("INSERT INTO messages(conversation_id, role, content, structured) VALUES (?, 'assistant', ?, ?)", (conversation_id, answer, json.dumps(structured) if structured else None))
         conn.execute("UPDATE conversations SET state=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(state), conversation_id))
         conn.execute("UPDATE conversations SET title=? WHERE id=? AND title='New conversation'", (user_text[:60], conversation_id))
-    return {"answer": answer, "structured": structured, "language": language, "response_time_ms": round((time.perf_counter() - started) * 1000), "usage": result.get("usage", {}), "provider": result.get("provider", "data"), "model": result.get("model", ""), "fallback_used": result.get("provider") == "ollama"}
+    return {"answer": answer, "structured": structured, "language": language, "response_time_ms": round((time.perf_counter() - started) * 1000), "usage": result.get("usage", {}), "provider": result.get("provider", "data"), "model": result.get("model", ""), "fallback_used": result.get("fallback_used", False), "fallback_reason": result.get("fallback_reason")}
 
 
 @router.post("/integrations/patient-records", dependencies=[Depends(require_scope("records:write"))])
 def add_patient_record(payload: PatientRecord):
     with db.connect() as conn:
-        cursor = conn.execute("INSERT INTO patient_records(patient_id, category, content, metadata) VALUES (?, ?, ?, ?)", (payload.patient_id, payload.category, payload.content, json.dumps(payload.metadata)))
-    return {"id": cursor.lastrowid, "status": "stored"}
+        statement = "INSERT INTO patient_records(patient_id, category, content, metadata) VALUES (?, ?, ?, ?)"
+        values = (payload.patient_id, payload.category, payload.content, json.dumps(payload.metadata))
+        if getattr(conn, "is_postgres", False):
+            cursor = conn.execute(f"{statement} RETURNING id", values)
+            record_id = cursor.fetchone()["id"]
+        else:
+            cursor = conn.execute(statement, values)
+            record_id = cursor.lastrowid
+    return {"id": record_id, "status": "stored"}
 
 
 @router.post("/integrations/doctors", dependencies=[Depends(require_scope("doctors:write"))])

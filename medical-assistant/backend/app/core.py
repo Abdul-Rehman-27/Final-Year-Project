@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     GROQ_BASE_URL: str = "https://api.groq.com/openai/v1"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = ""
+    MEDICAL_ASSISTANT_DATABASE_URL: str = ""
     MEDICAL_ASSISTANT_DB: str = str(PROJECT_ROOT / "medical-assistant" / "data.sqlite3")
     MEDICAL_ASSISTANT_API_KEYS: str = ""
     MEDICAL_ASSISTANT_CORS_ORIGINS: str = "http://localhost:5174,http://127.0.0.1:5174,http://localhost:8000,http://127.0.0.1:8000"

@@ -7,6 +7,6 @@ export default defineConfig({
     host: "0.0.0.0",
     port: 5174,
     strictPort: true,
-    proxy: { "/api": "http://localhost:8010" },
+    proxy: { "/api": process.env.MEDICAL_ASSISTANT_API_PROXY || "http://localhost:8010" },
   },
 });

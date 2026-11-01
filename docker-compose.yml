@@ -1,38 +1,112 @@
-# Dev environment: PostgreSQL + FastAPI backend + React frontend
 services:
   db:
     image: postgres:15
+    restart: unless-stopped
     environment:
       POSTGRES_USER: cityhospital
       POSTGRES_PASSWORD: cityhospital
       POSTGRES_DB: cityhospital
     ports:
-      - "5432:5432"
+      - "${POSTGRES_HOST_PORT:-5434}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cityhospital -d cityhospital"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  medical-assistant-backend:
+    build:
+      context: ./medical-assistant/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+      - ./medical-assistant/.env
+    environment:
+      MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8010:8010"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health', timeout=12)"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 20s
+
+  medical-assistant-frontend:
+    build:
+      context: ./medical-assistant/frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      MEDICAL_ASSISTANT_API_PROXY: http://medical-assistant-backend:8010
+    ports:
+      - "5174:5174"
+    depends_on:
+      medical-assistant-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5174').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   backend:
-    build: ./backend
-    env_file: ./backend/.env
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+      MEDICAL_ASSISTANT_URL: http://medical-assistant-backend:8010
+      MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+    command: sh -c "python -m scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     depends_on:
-      - db
-    volumes:
-      - ./backend:/app
+      db:
+        condition: service_healthy
+      medical-assistant-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   frontend:
-    image: node:20-alpine
-    working_dir: /app
-    command: sh -c "npm install && npm run dev -- --host"
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_MEDICAL_ASSISTANT_FRONTEND_URL: http://localhost:5174
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+      medical-assistant-frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5173').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
 volumes:
   pgdata:

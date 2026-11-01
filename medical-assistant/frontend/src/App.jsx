@@ -15,9 +15,24 @@ const SUMMARY_FIELDS = [
 ];
 const PATIENT_KEY = "medical-assistant-patient-id";
 const SESSION_KEY = "medical-assistant-session-id";
+let cityHospitalAuth = null;
 
 async function api(path, options = {}) {
-  const response = await fetch(path, options);
+  let url = path;
+  let requestOptions = options;
+  // Route embedded chat traffic through CityHospital so the admin usage totals are recorded.
+  if (cityHospitalAuth && path.startsWith("/api/v1/chat/sessions")) {
+    const apiBase = cityHospitalAuth.apiUrl.replace(/\/+$/, "");
+    url = `${apiBase}${path.replace(/^\/api\/v1/, "")}`;
+    requestOptions = {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${cityHospitalAuth.token}`,
+      },
+    };
+  }
+  const response = await fetch(url, requestOptions);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.detail || `Request failed (${response.status})`);
   return payload;
@@ -59,7 +74,8 @@ function Metric({ label, value }) {
 }
 
 function ChatView({ patientId }) {
-  const [conversationId, setConversationId] = useState(() => localStorage.getItem(SESSION_KEY));
+  const sessionKey = `${SESSION_KEY}:${patientId}`;
+  const [conversationId, setConversationId] = useState(() => localStorage.getItem(sessionKey));
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
   const [waiting, setWaiting] = useState(false);
@@ -81,7 +97,7 @@ function ChatView({ patientId }) {
         })));
         return id;
       } catch {
-        localStorage.removeItem(SESSION_KEY);
+        localStorage.removeItem(sessionKey);
       }
     }
     const created = await api("/api/v1/chat/sessions", {
@@ -89,10 +105,10 @@ function ChatView({ patientId }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ patient_id: patientId }),
     });
-    localStorage.setItem(SESSION_KEY, created.id);
+    localStorage.setItem(sessionKey, created.id);
     setMessages([]);
     return created.id;
-  }, [patientId]);
+  }, [patientId, sessionKey]);
 
   useEffect(() => {
     loadConversation(conversationId).then(setConversationId).catch((reason) => setError(reason.message));
@@ -149,12 +165,12 @@ function ChatView({ patientId }) {
   };
 
   const newConversation = async () => {
-    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(sessionKey);
     setMessages([]);
     setError("");
     try {
       const created = await api("/api/v1/chat/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ patient_id: patientId }) });
-      localStorage.setItem(SESSION_KEY, created.id);
+      localStorage.setItem(sessionKey, created.id);
       setConversationId(created.id);
     } catch (reason) { setError(reason.message); }
   };
@@ -259,6 +275,34 @@ function SummaryView() {
 
 export default function App() {
   const [view, setView] = useState("chat");
+  const embeddedMode = new URLSearchParams(window.location.search).get("embed") === "cityhospital";
+  const parentOrigin = new URLSearchParams(window.location.search).get("parentOrigin");
+  const [embeddedSession, setEmbeddedSession] = useState(null);
+
+  // Accept a patient session only from the CityHospital page that embedded this app.
+  useEffect(() => {
+    if (!embeddedMode || !parentOrigin) return undefined;
+    const receiveSession = (event) => {
+      if (event.source !== window.parent || event.origin !== parentOrigin) return;
+      if (event.data?.type !== "cityhospital-session" || !event.data.token || !event.data.patientId) return;
+      cityHospitalAuth = {
+        token: event.data.token,
+        patientId: String(event.data.patientId),
+        apiUrl: event.data.apiUrl,
+      };
+      setEmbeddedSession({
+        patientId: String(event.data.patientId),
+        patientName: event.data.patientName || "",
+      });
+    };
+    window.addEventListener("message", receiveSession);
+    window.parent.postMessage({ type: "medical-assistant-ready" }, parentOrigin);
+    return () => {
+      window.removeEventListener("message", receiveSession);
+      cityHospitalAuth = null;
+    };
+  }, [embeddedMode, parentOrigin]);
+
   const [patientId] = useState(() => {
     const existing = localStorage.getItem(PATIENT_KEY);
     if (existing) return existing;
@@ -282,6 +326,11 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [checkModels]);
 
+  if (embeddedMode && !embeddedSession) {
+    return <div className="grid min-h-screen place-items-center text-sm text-ink-muted">Connecting to CityHospital…</div>;
+  }
+  const activePatientId = embeddedSession?.patientId || patientId;
+
   return (
     <div className="min-h-screen lg:flex">
       <aside className="flex shrink-0 flex-row items-center gap-3 border-b border-line bg-white px-4 py-3 lg:min-h-screen lg:w-64 lg:flex-col lg:items-stretch lg:border-b-0 lg:border-r lg:px-4 lg:py-7">
@@ -289,14 +338,14 @@ export default function App() {
         <span className="hidden px-3 text-[10px] font-bold tracking-[1.2px] text-slate-400 lg:mb-3 lg:block">WORKSPACE</span>
         <nav className="ml-auto flex gap-1 lg:ml-0 lg:flex-col">
           <NavButton active={view === "chat"} onClick={() => setView("chat")} icon="◉">Patient chatbot</NavButton>
-          <NavButton active={view === "summary"} onClick={() => setView("summary")} icon="▤">Clinical summarizer</NavButton>
+          {!embeddedMode && <NavButton active={view === "summary"} onClick={() => setView("summary")} icon="▤">Clinical summarizer</NavButton>}
         </nav>
         <div className="mt-auto hidden gap-2 rounded-xl border border-line p-3 text-brand-700 lg:flex"><span>⌑</span><div><b className="text-[11px] text-ink">Your care, thoughtfully supported</b><p className="mt-1 text-[10px] leading-4 text-ink-muted">Answers use connected records and cautious AI assistance.</p></div></div>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col px-3 sm:px-6 lg:px-9">
-        <header className="mb-5 flex h-[88px] shrink-0 items-center justify-between border-b border-line sm:h-[104px]"><div><span className="text-[9px] font-bold tracking-[1.2px] text-slate-400">CITYHOSPITAL · MEDICAL ASSISTANT</span><h1 className="mt-1 text-xl font-bold tracking-tight sm:text-[22px]">{view === "chat" ? "Patient chatbot" : "Clinical summarizer"}</h1></div><div className="flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-[9px] text-ink-muted sm:text-[11px]"><i className={`h-2 w-2 rounded-full ${modelStatus.connected ? "bg-emerald-500" : "bg-amber-500"}`} /><span>{modelStatus.label}</span></div></header>
-        <div className="flex-1">{view === "chat" ? <ChatView patientId={patientId} /> : <SummaryView />}</div>
+        <header className="mb-5 flex h-[88px] shrink-0 items-center justify-between border-b border-line sm:h-[104px]"><div><span className="text-[9px] font-bold tracking-[1.2px] text-slate-400">CITYHOSPITAL · MEDICAL ASSISTANT</span><h1 className="mt-1 text-xl font-bold tracking-tight sm:text-[22px]">{view === "chat" ? "Patient chatbot" : "Clinical summarizer"}</h1></div><div className="flex items-center gap-3"><div className="flex items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-[9px] text-ink-muted sm:text-[11px]"><i className={`h-2 w-2 rounded-full ${modelStatus.connected ? "bg-emerald-500" : "bg-amber-500"}`} /><span>{modelStatus.label}</span></div>{embeddedMode && <><span className="hidden text-xs text-ink-muted sm:block">{embeddedSession?.patientName}</span><button onClick={() => window.parent.postMessage({ type: "cityhospital-logout" }, parentOrigin)} className="rounded-lg border border-line bg-white px-3 py-2 text-[10px] font-semibold text-ink hover:bg-surface">Log out</button></>}</div></header>
+        <div className="flex-1">{view === "chat" ? <ChatView patientId={activePatientId} /> : <SummaryView />}</div>
         <footer className="mt-3 flex h-10 items-center justify-between text-[8px] text-slate-400 sm:text-[9px]"><span>Medical Assistant Services</span><span>Patient chatbot · Doctor clinical summarizer</span></footer>
       </main>
     </div>

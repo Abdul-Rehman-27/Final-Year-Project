@@ -32,9 +32,24 @@ GROQ_API_KEY=your_groq_api_key
 
 Keep `.env` private; it is ignored by Git. You can instead configure settings as environment variables. `GROQ_API_KEY` may be left empty when using Ollama directly. Set `OLLAMA_BASE_URL` and optionally `OLLAMA_MODEL`; if the model name is empty, the first locally installed Ollama model is selected.
 
-The default SQLite file is `medical-assistant/data.sqlite3`. It is created automatically when the backend starts. `MEDICAL_ASSISTANT_DB` can point to another database file.
+The standalone default SQLite file is `medical-assistant/data.sqlite3`. It is created automatically when the backend starts. `MEDICAL_ASSISTANT_DB` can point to another SQLite file. Set `MEDICAL_ASSISTANT_DATABASE_URL` to store service records in PostgreSQL instead; the CityHospital integration can point it at the same database used for patients and chatbot usage.
 
 ## Run the application
+
+### Run the complete CityHospital stack with Docker
+
+From the repository root, create the two private environment files if they do not exist, then start the Compose project:
+
+```bash
+cp backend/.env.example backend/.env
+cp medical-assistant/.env.example medical-assistant/.env
+# Add a GroqCloud key to backend/.env if you want to use Groq.
+docker compose up --build
+```
+
+This starts PostgreSQL, the CityHospital API and frontend, and this Medical Assistant API and frontend as separate containers. Open the standalone assistant at <http://localhost:5174>; its API docs are at <http://localhost:8010/docs>. The CityHospital app is at <http://localhost:5173>. Compose creates and retains a named PostgreSQL volume across restarts. Run `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. See the root README for all service addresses and configuration details.
+
+### Run only the Medical Assistant manually
 
 Start the backend in one terminal from the repository root:
 
@@ -53,6 +68,14 @@ npm run dev
 ```
 
 Open <http://localhost:5174>. Vite forwards `/api` requests to the backend on port `8010`. The FastAPI interactive documentation is at <http://localhost:8010/docs>. Keep both terminals running while using the app.
+
+### Use the existing frontend inside CityHospital
+
+CityHospital embeds this same frontend for signed-in patients at its `/patient` route. In embedded mode, the frontend receives the authenticated patient session from CityHospital and routes conversation create, load, and send requests through CityHospital's `/api/v1/chat/sessions` API. CityHospital then enforces patient ownership, applies its current model and fallback settings, stores usage in its PostgreSQL database, and updates the admin Knowledge Base. The standalone workflow above continues to use this service's direct API and local demo patient reference; those direct requests do not update CityHospital usage totals.
+
+To use embedded mode locally, also run CityHospital's API on port `8000` and frontend on port `5173`. Register or sign in with a **Patient** account and open `/patient`. The Medical Assistant frontend URL defaults to <http://localhost:5174>; CityHospital can override it with `VITE_MEDICAL_ASSISTANT_FRONTEND_URL`. Keep API keys on the backend; the browser receives only the signed-in patient's CityHospital access token for authenticated chat calls.
+
+To migrate existing standalone SQLite records into PostgreSQL, set `MEDICAL_ASSISTANT_DATABASE_URL`, install the backend requirements, and run `../.venv/bin/python -m scripts.migrate_sqlite_to_postgres` from `medical-assistant/backend`. This copies conversations, messages, patient records, doctors, appointments, and summaries; it refuses to duplicate rows into non-empty tables.
 
 To build the frontend for serving from FastAPI, run `npm run build` in `medical-assistant/frontend`. When `frontend/dist` exists, the main FastAPI app serves those static files.
 
@@ -140,8 +163,8 @@ Clients send the selected key in the `X-API-Key` header. Supported scopes are `c
 
 ## Current limits and deployment notes
 
-- This is a separate service; it is not connected to CityHospital login, dashboards, or its production database.
-- Patient references and conversation IDs do not authenticate users. The frontend creates a local patient reference for demonstration, while the API checks that a conversation belongs to the supplied patient reference. A host application must authenticate patients and enforce access to patient IDs before using real records.
-- Doctor schedules and appointment bookings are stored in this service's SQLite database. A live deployment should use the hospital's authoritative scheduling system so external bookings and availability are reflected.
+- This is a separate API service with a standalone demo workflow. Standalone mode can use SQLite; CityHospital embedded mode authenticates the patient and can share PostgreSQL for assistant data, while CityHospital owns chatbot settings and usage records.
+- In standalone mode, patient references and conversation IDs do not authenticate users. The frontend creates a local patient reference for demonstration, while the API checks that a conversation belongs to the supplied patient reference. Do not use that standalone mode with real patient records without adding authentication and access controls.
+- Doctor schedules and appointment bookings are stored in the configured database (SQLite for standalone use or PostgreSQL when configured). A live deployment should use the hospital's authoritative scheduling system so external bookings and availability are reflected.
 - The summarizer UI is a clinician workflow, but this standalone project does not authenticate clinicians. Protect it behind an authenticated host application or gateway before deployment.
 - The assistant provides general information and decision support, not a diagnosis. For an emergency, contact local emergency services.

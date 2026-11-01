@@ -27,15 +27,33 @@ CityHospital/
 ├── ai/                       knowledge base + embeddings
 ├── evaluation/               400-query bilingual benchmark + metrics
 ├── docs/
-└── docker-compose.yml        PostgreSQL + backend + frontend
+└── docker-compose.yml        PostgreSQL + both APIs + both frontends
 ```
 
-## Run (Docker - easiest)
+## Run the full project with Docker (recommended)
+
+Install Docker Desktop (or Docker Engine with the Compose plugin), then from the repository root:
+
 ```bash
+cp backend/.env.example backend/.env
+cp medical-assistant/.env.example medical-assistant/.env
+# Add your GroqCloud key to backend/.env if you want to use Groq.
 docker compose up --build
-docker compose exec backend python -m scripts.seed     # creates admin + doctor
 ```
-Frontend http://localhost:5173 - API docs http://localhost:8000/docs
+
+Compose is the one-command orchestrator; it builds and runs five separate containers and waits for the database and APIs to become healthy:
+
+| Service | Address |
+|---|---|
+| CityHospital frontend | <http://localhost:5173> |
+| Medical Assistant frontend | <http://localhost:5174> |
+| CityHospital API docs | <http://localhost:8000/docs> |
+| Medical Assistant API docs | <http://localhost:8010/docs> |
+| PostgreSQL (from host tools) | `localhost:5434` |
+
+The CityHospital API seeds the admin and demo doctor at startup. Sign in with the seed account below. PostgreSQL data is kept in the `pgdata` Docker volume when containers stop or are rebuilt. Use `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. If host port 5434 is already taken, set `POSTGRES_HOST_PORT` in a root `.env` file to another free port. To stop the stack, press Ctrl+C in the Compose terminal or run `docker compose down` from another terminal.
+
+The Medical Assistant container can reach Ollama running on the host at `http://host.docker.internal:11434` by default. If needed, set `OLLAMA_BASE_URL` in the root `.env` file. Provider API keys belong in backend `.env` files, never in frontend files.
 
 ## Run (manually)
 **Backend** (Python 3.11, PostgreSQL running with the DB from `.env`):
@@ -43,12 +61,12 @@ Frontend http://localhost:5173 - API docs http://localhost:8000/docs
 cd backend
 python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env                                   # default DATABASE_URL is SQLite (no install needed)
+cp .env.example .env                                   # configure DATABASE_URL for your PostgreSQL server
 python -m scripts.seed
 uvicorn app.main:app --reload
 pytest                                                 # run tests
 ```
-Default database is SQLite (`dev.db`). To use PostgreSQL: `pip install -r requirements-postgres.txt` and set `DATABASE_URL=postgresql+psycopg2://user:pass@localhost:5432/cityhospital` (Docker Compose already does this).
+The backend uses PostgreSQL for accounts, conversations, messages, chatbot usage, settings, and admin audit records. Docker Compose starts the configured PostgreSQL database. The Medical Assistant can share it for conversations, messages, patient records, doctors, appointments, and summaries by setting `MEDICAL_ASSISTANT_DATABASE_URL`. For existing SQLite data, run `python -m scripts.migrate_sqlite_to_postgres` from each service's backend directory once; the migration refuses to copy into non-empty target tables.
 
 **Frontend** (Node 18+):
 ```bash
@@ -62,12 +80,12 @@ npm run dev
 |--------|------------------------------|---------------|
 | Admin  | admin@cityhospital.pk        | Admin@12345   |
 | Doctor | imran.malik@cityhospital.pk  | Doctor@12345  |
-Patients register themselves from the Register tab.
+Patients register themselves from the Register tab. Set `GROQ_API_KEY` in `backend/.env` for GroqCloud, or configure a reachable Ollama service; do not put provider keys in frontend files.
 
-## Admin portal (frontend, sample data)
-Log in as **Admin** -> `/admin`: Overview (stats + staff accounts), Staff (full list), Knowledge Base / Audit logs (coming soon).
+## Admin portal
+Log in as **Admin** -> `/admin`: Overview, Staff, Departments, Roles, Permissions, Knowledge Base monitoring, Research evaluation, and audit log records.
 Reusable pieces: `components/layout/DashboardLayout` (sidebar shell for any role), `components/common/{Card,StatCard,Badge,DataTable,Modal,PageHeader}`.
-Staff data is mocked in `src/services/staffService.js` (+ `src/data/mockStaff.js`); swap that one file for real API calls later.
+Most staff and administration pages still use mocked data; chatbot health, usage, model settings, and audit records use the backend.
 
 ## Languages
 The UI and the AI chatbot are bilingual only: **English and Urdu** (`en` / `ur`). No other languages are planned.
@@ -82,9 +100,9 @@ The UI and the AI chatbot are bilingual only: **English and Urdu** (`en` / `ur`)
 - Login: same error for wrong email/password/role (no account enumeration)
 
 
-## Admin module (frontend, mock services)
-Screens under `/admin` (sidebar): Overview, Staff, **Departments**, **Roles**, **Permissions**, Knowledge Base (coming soon),
-**Research evaluation**, Audit logs (coming soon). All new screens work in English and Urdu (RTL).
+## Admin module
+Screens under `/admin` (sidebar): Overview, Staff, **Departments**, **Roles**, **Permissions**, live **Knowledge Base** model and usage monitoring,
+**Research evaluation**, and Audit log records. All new screens work in English and Urdu (RTL).
 
 | Screen | What it does |
 |---|---|
@@ -94,6 +112,42 @@ Screens under `/admin` (sidebar): Overview, Staff, **Departments**, **Roles**, *
 | Staff (changed) | Add/Edit staff now has a **Department** field; the role list comes from the Roles screen; the table shows the department. |
 | Research evaluation | *Results*: run an evaluation, Top-1 accuracy EN vs UR, Urdu-English gap, ROUGE-L, by-category chart + table, summarizer metrics, incorrect answers, CSV export. *Benchmark dataset*: progress to 400 queries (200 EN + 200 UR), search/filter, add/edit/delete queries with ground truth, CSV export. |
 
-Data lives in `frontend/src/services/*Service.js` (in memory, resets on refresh). When the backend is ready only those files change
-(`departmentService`, `roleService`, `permissionService`, `staffService`, `evaluationService`). Evaluation numbers are
-**simulated** until the real pipeline in `evaluation/` is connected.
+Most admin pages still use mock data in `frontend/src/services/*Service.js` (in memory, resets on refresh). The Knowledge Base page uses the chatbot backend for live service health, model settings, and usage. Evaluation numbers are **simulated** until the real pipeline in `evaluation/` is connected.
+
+## Chatbot backend integration
+
+The CityHospital API proxies authenticated patient chat requests to the Medical Assistant service and stores conversations,
+messages, model selection, per-model token/latency usage, and admin change history in PostgreSQL. Configure the Medical Assistant's
+`MEDICAL_ASSISTANT_DATABASE_URL` to store its service records in the same database; standalone mode can still use SQLite. Configure `MEDICAL_ASSISTANT_URL` (default
+`http://localhost:8010`) and optionally `MEDICAL_ASSISTANT_API_KEY` if the Medical Assistant API requires scoped keys.
+Set `GROQ_MONTHLY_TOKEN_LIMIT` only when the applicable quota is known; the admin monitoring API reports remaining tokens
+only when a positive limit is configured. Groq failures, including quota, timeout, and API/network errors, can trigger Ollama fallback;
+once used, the local provider remains selected until an admin selects Groq again. Chatbot monitoring tables are created or upgraded
+by the idempotent startup migration in `backend/app/db/migrations/`.
+
+Authenticated patient endpoints are `/api/v1/chat/sessions` and `/api/v1/chat/sessions/{id}/messages`. Admin-only endpoints
+include `GET /api/v1/admin/models`, `GET /api/v1/admin/models/{model_id}/usage`, service and settings updates under
+`/api/v1/admin/`, plus the admin-only live socket at `/ws/admin/knowledge-base`. The socket authenticates with the existing JWT
+as its first message. Usage changes and admin setting changes are stored in PostgreSQL when running with Docker Compose.
+
+## Patient chatbot integration
+
+Patient login and registration use the CityHospital authentication screens. After sign-in, `/patient` embeds the existing Medical Assistant frontend from `medical-assistant/frontend`; it does not recreate the chat interface. In embedded mode, chat requests use the CityHospital JWT and go through `/api/v1/chat/sessions`, so CityHospital stores the conversation and per-model usage and broadcasts changes to the admin Knowledge Base page. The standalone Medical Assistant page remains available for its demo workflow; queries sent directly to its API are not included in CityHospital's admin usage totals.
+
+For local integration development, start these four services in separate terminals:
+
+```bash
+# Terminal 1: Medical Assistant API (port 8010)
+cd medical-assistant/backend && ../.venv/bin/uvicorn app.main:app --reload --port 8010
+
+# Terminal 2: existing Medical Assistant frontend (port 5174)
+cd medical-assistant/frontend && npm run dev
+
+# Terminal 3: CityHospital API (port 8000)
+cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+
+# Terminal 4: CityHospital frontend (port 5173)
+cd frontend && npm run dev
+```
+
+Open `http://localhost:5173/register` to create a patient account, or sign in at `http://localhost:5173/login` and select **Patient**. The embedded app URL defaults to `http://localhost:5174`; set `VITE_MEDICAL_ASSISTANT_FRONTEND_URL` if it runs elsewhere. CityHospital owns model routing, fallback, usage records, and admin settings.
