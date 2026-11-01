@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { useLanguage } from "../../context/LanguageContext.jsx";
-import { STAFF_ROLES, STAFF_STATUSES } from "../../config/staffRoles.js";
+import { STAFF_STATUSES } from "../../config/staffRoles.js";
+import { roleName } from "../../utils/roles.js";
 import { staffSchema } from "../../utils/validators.js";
 import Alert from "../common/Alert.jsx";
 import Button from "../common/Button.jsx";
@@ -12,15 +13,16 @@ import Input from "../common/Input.jsx";
 import Modal from "../common/Modal.jsx";
 import Select from "../common/Select.jsx";
 
-const EMPTY = { fullName: "", email: "", phone: "", photo: "", role: "", specialty: "", fee: "", status: "active" };
+const EMPTY = { fullName: "", email: "", phone: "", photo: "", role: "", departmentId: "", specialty: "", fee: "", status: "active" };
 
 /**
  * Add / edit staff dialog.
  *  - member = null  -> "Add staff"
  *  - member = {...} -> "Edit staff" (email is locked)
+ *  - roles / departments come from the Roles and Departments pages (admin-defined)
  *  - onSubmit(values) may throw { code: "EMAIL_TAKEN" }
  */
-export default function StaffFormModal({ open, member, onClose, onSubmit }) {
+export default function StaffFormModal({ open, member, roles = [], departments = [], onClose, onSubmit }) {
   const { t, lang } = useLanguage();
   const isEdit = !!member;
   const [serverError, setServerError] = useState("");
@@ -43,7 +45,7 @@ export default function StaffFormModal({ open, member, onClose, onSubmit }) {
   useEffect(() => {
     if (!open) return;
     setServerError("");
-    reset(member ? { ...EMPTY, ...member, fee: String(member.fee ?? "") } : EMPTY);
+    reset(member ? { ...EMPTY, ...member, fee: String(member.fee ?? ""), departmentId: String(member.departmentId ?? "") } : EMPTY);
   }, [open, member, reset]);
 
   // Translate visible error messages when the language changes
@@ -57,6 +59,7 @@ export default function StaffFormModal({ open, member, onClose, onSubmit }) {
     try {
       await onSubmit({
         ...values,
+        departmentId: Number(values.departmentId),
         fee: values.role === "doctor" ? Number(values.fee) : "",
         specialty: values.role === "doctor" ? values.specialty : "",
       });
@@ -102,9 +105,23 @@ export default function StaffFormModal({ open, member, onClose, onSubmit }) {
 
         <Select id="staff-role" label={t("admin.table.role")} error={errors.role?.message} {...register("role")}>
           <option value="">{t("admin.form.selectRole")}</option>
-          {STAFF_ROLES.map((r) => (
-            <option key={r} value={r}>
-              {t(`admin.roles.${r}`)}
+          {roles.map((r) => (
+            <option key={r.key} value={r.key}>
+              {roleName(t, r)}
+            </option>
+          ))}
+        </Select>
+
+        <Select
+          id="staff-department"
+          label={t("admin.form.department")}
+          error={errors.departmentId?.message}
+          {...register("departmentId")}
+        >
+          <option value="">{t("admin.form.selectDepartment")}</option>
+          {departments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.name}
             </option>
           ))}
         </Select>

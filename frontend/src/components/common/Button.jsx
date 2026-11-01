@@ -1,6 +1,8 @@
 const VARIANTS = {
   primary: "bg-brand-700 text-white hover:bg-brand-800",
   secondary: "border border-line bg-white text-ink hover:bg-brand-50",
+  danger: "bg-red-600 text-white hover:bg-red-700",
+  dangerOutline: "border border-red-200 bg-white text-red-700 hover:bg-red-50",
 };
 
 const SIZES = {
@@ -8,7 +10,7 @@ const SIZES = {
   sm: "rounded-lg px-4 py-2 text-sm",
 };
 
-/** variant: "primary" | "secondary" - size: "md" | "sm" - fullWidth: stretch to the container. */
+/** variant: "primary" | "secondary" | "danger" | "dangerOutline" - size: "md" | "sm" - fullWidth: stretch to the container. */
 export default function Button({
   children,
   loading = false,

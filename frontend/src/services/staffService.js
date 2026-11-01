@@ -11,6 +11,10 @@ const wait = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
 const makeTempPassword = () => `Ch@${Math.random().toString(36).slice(2, 8)}${10 + Math.floor(Math.random() * 90)}`;
 
 export const staffService = {
+  /** Number of staff using a role key / a department id (used to block deleting them). */
+  countByRole: (key) => staff.filter((s) => s.role === key).length,
+  countByDepartment: (id) => staff.filter((s) => s.departmentId === id).length,
+
   async list() {
     await wait();
     return [...staff];

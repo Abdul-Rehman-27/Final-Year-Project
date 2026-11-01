@@ -7,12 +7,14 @@ export const controlClass = (error) =>
 export default function FieldShell({ id, label, error, optional, optionalText, children }) {
   return (
     <div>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
-        {label}
-        {optional && (
-          <span className="ms-1 text-sm font-normal text-ink-muted">({optionalText})</span>
-        )}
-      </label>
+      {label && (
+        <label htmlFor={id} className="mb-1.5 block text-sm font-bold">
+          {label}
+          {optional && (
+            <span className="ms-1 text-sm font-normal text-ink-muted">({optionalText})</span>
+          )}
+        </label>
+      )}
       {children}
       {error && (
         <p id={`${id}-error`} role="alert" className="mt-1.5 text-sm text-red-600">

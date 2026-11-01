@@ -20,7 +20,7 @@ export default function Sidebar({ items, onNavigate }) {
         <Logo name={t("brand")} />
       </div>
 
-      <ul className="space-y-2">
+      <ul className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {items.map((item) => (
           <li key={item.to}>
             <NavLink
@@ -39,7 +39,7 @@ export default function Sidebar({ items, onNavigate }) {
         ))}
       </ul>
 
-      <button onClick={onLogout} className="mt-auto rounded-xl px-4 py-3 text-start font-bold text-ink-muted hover:bg-brand-50">
+      <button onClick={onLogout} className="mt-2 shrink-0 rounded-xl px-4 py-3 text-start font-bold text-ink-muted hover:bg-brand-50">
         {t("dashboards.logout")}
       </button>
     </nav>

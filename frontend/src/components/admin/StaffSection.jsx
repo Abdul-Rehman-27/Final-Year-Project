@@ -1,6 +1,9 @@
 import { useState } from "react";
 
 import { useLanguage } from "../../context/LanguageContext.jsx";
+import useDepartments from "../../hooks/useDepartments.js";
+import useRoles from "../../hooks/useRoles.js";
+import { makeRoleLabel } from "../../utils/roles.js";
 import Alert from "../common/Alert.jsx";
 import Avatar from "../common/Avatar.jsx";
 import Badge from "../common/Badge.jsx";
@@ -17,6 +20,10 @@ export default function StaffSection({ staff, loading, addStaff, updateStaff, li
   const { t } = useLanguage();
   const [modal, setModal] = useState({ open: false, member: null });
   const [notice, setNotice] = useState("");
+  const { roles } = useRoles();
+  const { departments } = useDepartments();
+  const roleLabel = makeRoleLabel(t, roles);
+  const departmentName = (id) => departments.find((d) => d.id === id)?.name || "-";
 
   const rows = limit ? staff.slice(0, limit) : staff;
   const closeModal = () => setModal({ open: false, member: null });
@@ -55,7 +62,8 @@ export default function StaffSection({ staff, loading, addStaff, updateStaff, li
         </span>
       ),
     },
-    { header: t("admin.table.role"), render: (s) => t(`admin.roles.${s.role}`) },
+    { header: t("admin.table.role"), render: (s) => roleLabel(s.role) },
+    { header: t("admin.table.department"), render: (s) => departmentName(s.departmentId) },
     {
       header: t("admin.table.status"),
       render: (s) => <Badge tone={s.status === "active" ? "success" : "neutral"}>{t(`admin.status.${s.status}`)}</Badge>,
@@ -94,7 +102,14 @@ export default function StaffSection({ staff, loading, addStaff, updateStaff, li
         emptyText={t("admin.empty")}
       />
 
-      <StaffFormModal open={modal.open} member={modal.member} onClose={closeModal} onSubmit={handleSubmit} />
+      <StaffFormModal
+        open={modal.open}
+        member={modal.member}
+        roles={roles}
+        departments={departments}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+      />
     </Card>
   );
 }
