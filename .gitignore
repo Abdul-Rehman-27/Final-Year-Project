@@ -11,3 +11,10 @@ venv/
 .idea/
 ai/embeddings/*
 !ai/embeddings/.gitkeep
+medical-chat-*.txt
+.venv/
+.env
+*.sqlite3
+*.db
+__pycache__/
+node_modules/
