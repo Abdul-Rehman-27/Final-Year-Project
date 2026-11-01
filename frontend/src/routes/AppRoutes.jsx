@@ -2,7 +2,11 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import DashboardLayout from "../components/layout/DashboardLayout.jsx";
 import { ADMIN_NAV } from "../config/adminNav.js";
+import AdminDepartments from "../pages/admin/AdminDepartments.jsx";
+import AdminEvaluation from "../pages/admin/AdminEvaluation.jsx";
 import AdminOverview from "../pages/admin/AdminOverview.jsx";
+import AdminPermissions from "../pages/admin/AdminPermissions.jsx";
+import AdminRoles from "../pages/admin/AdminRoles.jsx";
 import AdminStaff from "../pages/admin/AdminStaff.jsx";
 import AuthPage from "../pages/auth/AuthPage.jsx";
 import ComingSoon from "../pages/ComingSoon.jsx";
@@ -43,6 +47,10 @@ export default function AppRoutes() {
       >
         <Route index element={<AdminOverview />} />
         <Route path="staff" element={<AdminStaff />} />
+        <Route path="departments" element={<AdminDepartments />} />
+        <Route path="roles" element={<AdminRoles />} />
+        <Route path="permissions" element={<AdminPermissions />} />
+        <Route path="evaluation" element={<AdminEvaluation />} />
         <Route path="knowledge-base" element={<ComingSoon titleKey="admin.nav.knowledgeBase" />} />
         <Route path="audit-logs" element={<ComingSoon titleKey="admin.nav.auditLogs" />} />
       </Route>

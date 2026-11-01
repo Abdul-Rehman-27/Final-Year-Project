@@ -80,3 +80,20 @@ The UI and the AI chatbot are bilingual only: **English and Urdu** (`en` / `ur`)
 - Gender required; password 8-64 chars with upper, lower, number, special, no spaces; confirm must match
 - Terms checkbox required; role can never be chosen by the client on register (always patient)
 - Login: same error for wrong email/password/role (no account enumeration)
+
+
+## Admin module (frontend, mock services)
+Screens under `/admin` (sidebar): Overview, Staff, **Departments**, **Roles**, **Permissions**, Knowledge Base (coming soon),
+**Research evaluation**, Audit logs (coming soon). All new screens work in English and Urdu (RTL).
+
+| Screen | What it does |
+|---|---|
+| Departments | Add / edit / delete departments. A department that still has staff cannot be deleted. |
+| Permissions | Add / edit / delete permissions (name, unique code, description). Starts with View, Create, Edit, Delete. Deleting one also removes it from every role. |
+| Roles | Add / edit / delete roles. Pick a role, switch permissions on/off, then *Save changes* - only switched-on permissions are active for that role. The 5 system roles (doctor, receptionist, pharmacist, nurse, admin) cannot be deleted. A role that has staff cannot be deleted. |
+| Staff (changed) | Add/Edit staff now has a **Department** field; the role list comes from the Roles screen; the table shows the department. |
+| Research evaluation | *Results*: run an evaluation, Top-1 accuracy EN vs UR, Urdu-English gap, ROUGE-L, by-category chart + table, summarizer metrics, incorrect answers, CSV export. *Benchmark dataset*: progress to 400 queries (200 EN + 200 UR), search/filter, add/edit/delete queries with ground truth, CSV export. |
+
+Data lives in `frontend/src/services/*Service.js` (in memory, resets on refresh). When the backend is ready only those files change
+(`departmentService`, `roleService`, `permissionService`, `staffService`, `evaluationService`). Evaluation numbers are
+**simulated** until the real pipeline in `evaluation/` is connected.

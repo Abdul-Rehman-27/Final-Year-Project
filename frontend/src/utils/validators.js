@@ -111,6 +111,7 @@ export function staffSchema(t) {
         .transform(normalizePhone)
         .pipe(z.string().regex(PHONE_RE, t("validation.phoneInvalid"))),
       role: z.string().min(1, t("validation.roleRequired")),
+      departmentId: z.string().min(1, t("validation.departmentRequired")),
       photo: z.string(),
       specialty: z.string().trim().max(50, t("validation.specialtyMax")),
       fee: z.string().trim(),
@@ -126,4 +127,63 @@ export function staffSchema(t) {
         ctx.addIssue({ code: "custom", path: ["fee"], message: t("validation.feeInvalid") });
       }
     });
+}
+
+export const CODE_RE = /^[a-z][a-z0-9_:]*$/;
+
+const cleanName = (t, min, max) =>
+  z
+    .string()
+    .transform((v) => v.trim().replace(/\s+/g, " "))
+    .pipe(
+      z
+        .string()
+        .min(1, t("validation.required"))
+        .min(min, t(min === 2 ? "validation.nameMin2" : "validation.nameMin"))
+        .max(max, t(max === 30 ? "validation.nameMax30" : "validation.nameMax40"))
+    );
+
+/** Department: name + optional description. */
+export function departmentSchema(t) {
+  return z.object({
+    name: cleanName(t, 2, 40),
+    description: z.string().trim().max(200, t("validation.descMax")),
+  });
+}
+
+/** Permission: name + unique code + optional description. */
+export function permissionSchema(t) {
+  return z.object({
+    name: cleanName(t, 2, 40),
+    code: z
+      .string()
+      .trim()
+      .min(1, t("validation.required"))
+      .max(40, t("validation.codeMax"))
+      .regex(CODE_RE, t("validation.codeInvalid")),
+    description: z.string().trim().max(200, t("validation.descMax")),
+  });
+}
+
+/** Role: name + optional description (permissions are assigned separately). */
+export function roleSchema(t) {
+  return z.object({
+    name: cleanName(t, 2, 30),
+    description: z.string().trim().max(200, t("validation.descMax")),
+  });
+}
+
+/** One benchmark query with its ground-truth label. */
+export function benchmarkQuerySchema(t) {
+  return z.object({
+    lang: z.string().refine((v) => ["en", "ur"].includes(v), t("validation.required")),
+    category: z.string().min(1, t("validation.required")),
+    query: z
+      .string()
+      .trim()
+      .min(1, t("validation.required"))
+      .min(5, t("validation.queryMin"))
+      .max(300, t("validation.queryMax")),
+    truth: z.string().trim().min(1, t("validation.required")).max(100, t("validation.truthMax")),
+  });
 }
