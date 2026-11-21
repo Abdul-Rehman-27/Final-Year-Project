@@ -16,18 +16,27 @@ On Windows PowerShell, use `Copy-Item` instead of `cp` if needed. The stack down
 
 For Groq provider support, add a Groq API key to `GROQ_API_KEY` in `backend/.env`. This is optional; do not share or commit `.env` files.
 
-## Pull and start the published images
+## One-time image setup
 
 Edit the root `.env` file and set `DOCKERHUB_USERNAME` to the image owner's Docker Hub namespace and `DOCKERHUB_REPOSITORY` to the lowercase GitHub repository name used by the publisher. Then run:
 
 ```bash
 docker compose pull
-docker compose up
 ```
 
 Public images do not require Docker Hub credentials on your machine. For private images, the owner must grant your Docker Hub account access and you must run `docker login` using your own account (never the publisher's token).
 
-For building from source instead, run `docker compose up --build`.
+Run `docker compose pull` after the image publisher has pushed the images. If they are private, the owner must grant your friend's Docker Hub account access and your friend must run `docker login` with their own account.
+
+## Start with one click
+
+After Docker is installed and the root `.env` has the correct image namespace and repository, start the project by double-clicking:
+
+- Windows: `start-windows.bat`
+- macOS: `Start CityHospital.command`
+- Linux: run `start.sh` (double-click behavior depends on the desktop environment)
+
+The launcher pulls the latest app images, starts the containers, waits for CityHospital to become ready, and opens it in your browser. The first start also downloads the Ollama models and can take several minutes. Docker must be running. To build from source instead, use `docker compose up --build` in a terminal.
 
 ## Open the application
 
