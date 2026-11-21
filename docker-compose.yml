@@ -1,4 +1,27 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  ollama-models:
+    image: ollama/ollama:latest
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["ollama pull gemma3:4b && ollama pull gemma2:9b"]
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+
   db:
     image: postgres:15
     restart: unless-stopped
@@ -17,6 +40,7 @@ services:
       retries: 10
 
   medical-assistant-backend:
+    image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-medical-assistant-backend:${IMAGE_TAG:-latest}
     build:
       context: ./medical-assistant/backend
       dockerfile: Dockerfile
@@ -26,15 +50,15 @@ services:
       - ./medical-assistant/.env
     environment:
       MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     ports:
       - "8010:8010"
     depends_on:
       db:
         condition: service_healthy
+      ollama-models:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/api/v1/health', timeout=12)"]
       interval: 20s
@@ -43,6 +67,7 @@ services:
       start_period: 20s
 
   medical-assistant-frontend:
+    image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-medical-assistant-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./medical-assistant/frontend
       dockerfile: Dockerfile
@@ -62,6 +87,7 @@ services:
       start_period: 10s
 
   backend:
+    image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-backend:${IMAGE_TAG:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -88,6 +114,7 @@ services:
       start_period: 15s
 
   frontend:
+    image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-frontend:${IMAGE_TAG:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -111,3 +138,4 @@ services:
 
 volumes:
   pgdata:
+  ollama_models:

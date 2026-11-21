@@ -1,81 +1,66 @@
 # Run CityHospital on your computer
 
-This guide starts the complete project: CityHospital, the Medical Assistant, and PostgreSQL. Docker handles Python, Node, and database setup for you.
+This guide starts CityHospital, the Medical Assistant, PostgreSQL, and Ollama with Docker Compose.
 
-## 1. Install the prerequisites
+## Prerequisites and configuration
 
-- Install **Docker Desktop** (Windows or macOS), or Docker Engine with the Docker Compose plugin (Linux).
-- Start Docker and wait until it reports that it is running.
-- Get a copy of this project on your computer (download the ZIP and extract it, or clone the repository).
-
-## 2. Open a terminal in the project folder
-
-Change directory to the folder that contains `docker-compose.yml`. For example:
-
-```bash
-cd CityHospital
-```
-
-On Windows, open PowerShell in the extracted project folder instead.
-
-## 3. Create the local settings files
-
-Run these commands from the project folder:
-
-**macOS / Linux / Git Bash:**
+Install Docker Desktop (Windows/macOS) or Docker Engine with the Compose plugin (Linux), then copy the repository to your computer. From its root folder, copy the local settings files:
 
 ```bash
 cp backend/.env.example backend/.env
 cp medical-assistant/.env.example medical-assistant/.env
+cp .env.example .env
 ```
 
-**Windows PowerShell:**
+On Windows PowerShell, use `Copy-Item` instead of `cp` if needed. The stack downloads `gemma3:4b` and `gemma2:9b` into a persistent Docker volume on first startup. This can take a while and needs several GB of free disk space. Ollama does not need to be installed separately.
 
-```powershell
-Copy-Item backend/.env.example backend/.env
-Copy-Item medical-assistant/.env.example medical-assistant/.env
-```
+For Groq provider support, add a Groq API key to `GROQ_API_KEY` in `backend/.env`. This is optional; do not share or commit `.env` files.
 
-The project can start without an AI provider key, but AI chat and summaries need a working provider. To use Groq, get a GroqCloud API key and put it after `GROQ_API_KEY=` in `backend/.env`. Keep the key private and do not send or commit your `.env` files. Ollama can be used instead if it is installed and running on your computer; see `medical-assistant/README.md` for its settings.
+## Pull and start the published images
 
-## 4. Build and start the project
-
-Run from the project folder:
+Edit the root `.env` file and set `DOCKERHUB_USERNAME` to the image owner's Docker Hub namespace and `DOCKERHUB_REPOSITORY` to the lowercase GitHub repository name used by the publisher. Then run:
 
 ```bash
-docker compose up --build
+docker compose pull
+docker compose up
 ```
 
-The first build may take several minutes. Keep this terminal open while using the project. Wait until the services have started, then open:
+Public images do not require Docker Hub credentials on your machine. For private images, the owner must grant your Docker Hub account access and you must run `docker login` using your own account (never the publisher's token).
+
+For building from source instead, run `docker compose up --build`.
+
+## Open the application
 
 - CityHospital: <http://localhost:5173>
 - Medical Assistant standalone: <http://localhost:5174>
-- CityHospital API documentation: <http://localhost:8000/docs>
-- Medical Assistant API documentation: <http://localhost:8010/docs>
+- CityHospital API docs: <http://localhost:8000/docs>
+- Medical Assistant API docs: <http://localhost:8010/docs>
 
-## 5. Sign in or create an account
-
-The seeded demo accounts are:
+The CityHospital API seeds demo accounts at startup:
 
 | Role | Email | Password |
 | --- | --- | --- |
 | Admin | `admin@cityhospital.pk` | `Admin@12345` |
 | Doctor | `imran.malik@cityhospital.pk` | `Doctor@12345` |
 
-For a patient account, choose **Register** in CityHospital, create an account, then sign in as **Patient**. The patient dashboard embeds the Medical Assistant.
+Change demo credentials before using the system beyond local development.
 
-## 6. Stop or restart
+## Stop and restart
 
-- To stop, press **Ctrl+C** in the terminal running Docker Compose.
-- To start again later, run `docker compose up` from the project folder.
-- To stop and remove the containers, run `docker compose down`.
-- To also erase the saved PostgreSQL database and start fresh, run `docker compose down -v`. This permanently deletes the project's database data.
+- Stop: press **Ctrl+C**, or run `docker compose down`.
+- Start again: `docker compose up`.
+- Remove containers: `docker compose down`.
+- Remove containers, database, and downloaded models: `docker compose down -v` (permanently deletes this data).
 
-The database is retained when you stop or rebuild the containers. If a port is already in use, close the other app using it or change the host port configuration in a root `.env` file; PostgreSQL defaults to port `5434` on your computer.
+If a port is busy, change its mapping in `docker-compose.yml`. PostgreSQL uses host port `5434` by default.
 
-## Troubleshooting
+## Docker Hub publishing (repository maintainer)
 
-- **Docker command not found / cannot connect:** Start or install Docker Desktop, then reopen the terminal.
-- **A page does not load right away:** The first startup takes time. Check the Compose terminal and wait for the services to finish starting.
-- **Port already in use:** Another program may be using `5173`, `5174`, `8000`, `8010`, or `5434`. Stop that program and retry.
-- **AI response/provider error:** Check that `GROQ_API_KEY` is set correctly in `backend/.env`, then restart with `docker compose up`.
+Create a Docker Hub access token with read/write permissions. In the GitHub repository, open **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+| GitHub Actions secret | Value |
+| --- | --- |
+| `DOCKERHUB_USERNAME` | Docker Hub username or organization namespace |
+| `DOCKERHUB_TOKEN` | The Docker Hub access token, not your account password |
+
+The workflow at `.github/workflows/publish-dockerhub.yml` runs on pushes to `main` or `master`; it can also be started from **Actions → Build and publish Docker images → Run workflow**. It pushes four app images to `NAMESPACE/REPOSITORY-backend`, `...-frontend`, `...-medical-assistant-backend`, and `...-medical-assistant-frontend`, tagged `latest` and with the commit SHA. The GitHub repository's name forms `REPOSITORY` (lowercase). Ollama itself uses the official image, and model weights download on first run; they are not pushed to Docker Hub.

@@ -39,10 +39,10 @@ cp backend/.env.example backend/.env
 cp medical-assistant/.env.example medical-assistant/.env
 cp .env.example .env
 # Add your GroqCloud key to backend/.env if you want to use Groq.
-docker compose up --build
+docker compose up
 ```
 
-Compose builds and runs five containers: PostgreSQL, the CityHospital API and frontend, and the Medical Assistant API and frontend. Ollama runs on each developer's host computer, outside Docker. Install Ollama and pull the model configured by `OLLAMA_MODEL` before starting the project.
+Compose runs seven containers: PostgreSQL, the CityHospital API and frontend, the Medical Assistant API and frontend, Ollama, and a one-shot model downloader. The downloader pulls `gemma3:4b` and `gemma2:9b` into a persistent volume. The first run needs several GB of disk space and takes longer while the models download. Use `docker compose up --build` to build the app images locally instead of pulling the published Docker Hub images. See [FRIEND_SETUP.md](FRIEND_SETUP.md) for Docker Hub setup and GitHub Actions publishing credentials.
 
 | Service | Address |
 |---|---|
@@ -52,9 +52,7 @@ Compose builds and runs five containers: PostgreSQL, the CityHospital API and fr
 | Medical Assistant API docs | <http://localhost:8010/docs> |
 | PostgreSQL (from host tools) | `localhost:5434` |
 
-The CityHospital API seeds the admin and demo doctor at startup. Sign in with the seed account below. PostgreSQL data is kept in the `pgdata` Docker volume. Use `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. Set `OLLAMA_MODEL` in the root `.env` to a model installed on the host; the default is `gemma3:4b`. If host port 5434 is already taken, set `POSTGRES_HOST_PORT` in the root `.env` to another free port.
-
-On Linux, the host Ollama service normally listens only on localhost. To let containers reach it, configure the service with `OLLAMA_HOST=0.0.0.0:11434`, then restart Ollama. On macOS or Windows with Docker Desktop, use the platform's Ollama environment-variable setup and restart the app. Confirm `curl http://127.0.0.1:11434/api/tags` works on the host and `http://host.docker.internal:11434/api/tags` is reachable from the Medical Assistant container. Provider API keys belong in backend `.env` files, never in frontend files.
+The CityHospital API seeds the admin and demo doctor at startup. PostgreSQL and Ollama model data persist in Docker volumes. Use `docker compose down -v` to remove both data volumes. Set `DOCKERHUB_USERNAME` and `DOCKERHUB_REPOSITORY` in the root `.env` to pull published images. If host port 5434 is already taken, change `POSTGRES_HOST_PORT` in the root `.env`. Provider API keys belong in backend `.env` files, never in frontend files.
 
 ## Run (manually)
 **Backend** (Python 3.11, PostgreSQL running with the DB from `.env`):
