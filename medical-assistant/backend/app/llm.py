@@ -21,10 +21,10 @@ def _token_limit(text):
     return any(term in text for term in ("context_length", "maximum context", "token limit", "tokens per minute", "tokens per day", "too many tokens", "prompt is too long"))
 
 
-async def groq_chat(messages, max_tokens=1500, json_mode=False, model=None):
+async def groq_chat(messages, max_tokens=1500, json_mode=False, model=None, timeout=90):
     if not settings.GROQ_API_KEY:
         raise RuntimeError("GroqCloud API key is not configured.")
-    async with httpx.AsyncClient(timeout=90) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         model = model or settings.GROQ_MODEL
         body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens, "temperature": 0.1}
         if json_mode:
@@ -40,8 +40,8 @@ async def groq_chat(messages, max_tokens=1500, json_mode=False, model=None):
     return {"text": choice["message"]["content"], "usage": payload.get("usage", {}), "provider": "groq", "model": model, "finish_reason": choice.get("finish_reason")}
 
 
-async def ollama_chat(messages, max_tokens=700, json_mode=False, selected_model=None):
-    async with httpx.AsyncClient(timeout=120) as client:
+async def ollama_chat(messages, max_tokens=700, json_mode=False, selected_model=None, timeout=120):
+    async with httpx.AsyncClient(timeout=timeout) as client:
         tags = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/tags")
         tags.raise_for_status()
         available = [model["name"] for model in tags.json().get("models", [])]
@@ -56,20 +56,22 @@ async def ollama_chat(messages, max_tokens=700, json_mode=False, selected_model=
     payload = response.json()
     prompt = payload.get("prompt_eval_count", 0)
     completion = payload.get("eval_count", 0)
-    return {"text": payload["message"]["content"], "usage": {"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": prompt + completion}, "provider": "ollama", "model": model, "finish_reason": "stop"}
+    return {"text": payload["message"]["content"], "usage": {"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": prompt + completion}, "provider": "ollama", "model": model, "finish_reason": payload.get("done_reason") or "stop"}
 
 
-async def chat(messages, max_tokens=700, json_mode=False, provider="groq", groq_model=None, ollama_model=None, auto_fallback=True):
+async def chat(messages, max_tokens=700, json_mode=False, provider="groq", groq_model=None, ollama_model=None, auto_fallback=True, no_timeout=False):
+    groq_timeout = None if no_timeout else 90
+    ollama_timeout = None if no_timeout else 120
     if provider == "ollama":
-        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model)
+        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
         result["fallback_used"] = False
         result["fallback_reason"] = None
         return result
     try:
-        result = await groq_chat(messages, max_tokens, json_mode, groq_model)
+        result = await groq_chat(messages, max_tokens, json_mode, groq_model, groq_timeout)
         if result.get("finish_reason") == "length":
             if auto_fallback:
-                result = await ollama_chat(messages, max_tokens, json_mode, ollama_model)
+                result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
                 result["fallback_used"] = True
                 result["fallback_reason"] = "token_limit"
             else:
@@ -98,7 +100,7 @@ async def chat(messages, max_tokens=700, json_mode=False, provider="groq", groq_
 
     # Any quota, API, timeout or connection problem can use the local model.
     try:
-        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model)
+        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
         result["fallback_used"] = True
         result["fallback_reason"] = fallback_reason
         return result

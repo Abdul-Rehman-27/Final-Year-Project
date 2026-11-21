@@ -1,40 +1,39 @@
-import { INITIAL_STAFF } from "../data/mockStaff.js";
+import api from "./api.js";
 
-/**
- * MOCK staff service (data lives in memory and resets on page refresh).
- * When the backend is ready, only this file changes: replace the bodies with
- * api.get("/admin/staff"), api.post("/admin/staff"), api.put(...) calls.
- */
-let staff = [...INITIAL_STAFF];
-const wait = (ms = 300) => new Promise((resolve) => setTimeout(resolve, ms));
+function mapAdminError(error) {
+  const code = error?.response?.data?.detail;
+  if (["EMAIL_TAKEN", "DEPARTMENT_NOT_FOUND", "ROLE_NOT_FOUND", "SELF_LOCKOUT"].includes(code)) {
+    throw Object.assign(new Error(code), { code });
+  }
+  throw error;
+}
 
-const makeTempPassword = () => `Ch@${Math.random().toString(36).slice(2, 8)}${10 + Math.floor(Math.random() * 90)}`;
+const payloadFor = (data) => ({
+  ...data,
+  departmentId: Number(data.departmentId),
+  fee: data.fee === "" || data.fee == null ? null : Number(data.fee),
+});
 
 export const staffService = {
-  /** Number of staff using a role key / a department id (used to block deleting them). */
-  countByRole: (key) => staff.filter((s) => s.role === key).length,
-  countByDepartment: (id) => staff.filter((s) => s.departmentId === id).length,
-
   async list() {
-    await wait();
-    return [...staff];
+    try {
+      return (await api.get("/admin/staff")).data;
+    } catch (error) {
+      mapAdminError(error);
+    }
   },
-
-  /** Returns { member, tempPassword }. Throws { code: "EMAIL_TAKEN" } for a duplicate email. */
   async create(data) {
-    await wait();
-    const email = data.email.toLowerCase();
-    if (staff.some((s) => s.email === email)) throw { code: "EMAIL_TAKEN" };
-    const member = { ...data, email, id: Date.now(), status: "active" };
-    staff = [member, ...staff];
-    return { member, tempPassword: makeTempPassword() };
+    try {
+      return (await api.post("/admin/staff", payloadFor(data))).data;
+    } catch (error) {
+      mapAdminError(error);
+    }
   },
-
   async update(id, data) {
-    await wait();
-    const current = staff.find((s) => s.id === id);
-    const member = { ...current, ...data, email: current.email }; // email cannot be changed
-    staff = staff.map((s) => (s.id === id ? member : s));
-    return member;
+    try {
+      return (await api.patch(`/admin/staff/${id}`, payloadFor(data))).data;
+    } catch (error) {
+      mapAdminError(error);
+    }
   },
 };

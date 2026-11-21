@@ -5,14 +5,23 @@ import { departmentService } from "../services/departmentService.js";
 export default function useDepartments() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const reload = useCallback(async () => {
-    setDepartments(await departmentService.list());
-    setLoading(false);
+    setLoading(true);
+    try {
+      setDepartments(await departmentService.list());
+      setError(false);
+    } catch (err) {
+      setError(true);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    reload();
+    reload().catch(() => {});
   }, [reload]);
 
   const addDepartment = async (data) => {
@@ -28,5 +37,5 @@ export default function useDepartments() {
     await reload();
   };
 
-  return { departments, loading, addDepartment, updateDepartment, removeDepartment };
+  return { departments, loading, error, addDepartment, updateDepartment, removeDepartment };
 }

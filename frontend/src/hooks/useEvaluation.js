@@ -5,15 +5,47 @@ import { evaluationService } from "../services/evaluationService.js";
 export default function useEvaluation() {
   const [queries, setQueries] = useState([]);
   const [runs, setRuns] = useState([]);
+  const [models, setModels] = useState({ groq: [], ollama: [] });
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
 
-  const reloadQueries = useCallback(async () => setQueries(await evaluationService.listQueries()), []);
+  const upsertRun = (next) => setRuns((current) => [next, ...current.filter((item) => item.id !== next.id)].sort((a, b) => b.id - a.id));
+
+  const reloadQueries = useCallback(async () => {
+    setQueries(await evaluationService.listQueries());
+  }, []);
   const reloadRuns = useCallback(async () => setRuns(await evaluationService.listRuns()), []);
+  const reloadModels = useCallback(async () => setModels(await evaluationService.listModels()), []);
 
   useEffect(() => {
-    Promise.all([reloadQueries(), reloadRuns()]).then(() => setLoading(false));
-  }, [reloadQueries, reloadRuns]);
+    let stopped = false;
+    const initialize = async () => {
+      try {
+        const [initialQueries, initialRuns, initialModels] = await Promise.all([
+          evaluationService.listQueries(), evaluationService.listRuns(), evaluationService.listModels(),
+        ]);
+        if (stopped) return;
+        setQueries(initialQueries);
+        setRuns(initialRuns);
+        setModels(initialModels);
+        setLoading(false);
+        let active = initialRuns.find((item) => ["queued", "running"].includes(item.status));
+        if (!active) return;
+        setRunning(true);
+        while (!stopped && active && ["queued", "running"].includes(active.status)) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          active = await evaluationService.getRun(active.id);
+          if (!stopped) upsertRun(active);
+        }
+      } catch {
+        if (!stopped) setLoading(false);
+      } finally {
+        if (!stopped) setRunning(false);
+      }
+    };
+    initialize();
+    return () => { stopped = true; };
+  }, []);
 
   const addQuery = async (data) => {
     await evaluationService.createQuery(data);
@@ -28,17 +60,52 @@ export default function useEvaluation() {
     await reloadQueries();
   };
 
-  /** Starts a run; resolves with the new run (it is the newest in `runs`). */
-  const startRun = async () => {
+  const monitorRun = async (initial, onStarted) => {
+    let active = initial;
+    upsertRun(active);
+    onStarted?.(active.id);
+    while (["queued", "running"].includes(active.status)) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      active = await evaluationService.getRun(active.id);
+      upsertRun(active);
+    }
+    if (active.status === "failed") throw new Error(active.error || "Evaluation failed.");
+    await reloadRuns();
+    return active;
+  };
+
+  const startRun = async (selection, onStarted) => {
     setRunning(true);
     try {
-      const run = await evaluationService.runEvaluation();
-      await reloadRuns();
-      return run;
+      return await monitorRun(await evaluationService.runEvaluation(selection), onStarted);
     } finally {
       setRunning(false);
     }
   };
 
-  return { queries, runs, loading, running, addQuery, updateQuery, removeQuery, startRun };
+  const resumeRun = async (id, onStarted) => {
+    setRunning(true);
+    try {
+      return await monitorRun(await evaluationService.resumeRun(id), onStarted);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const cancelRun = async (id) => {
+    const run = await evaluationService.cancelRun(id);
+    upsertRun(run);
+    return run;
+  };
+
+  const deleteRun = async (id) => {
+    try {
+      await evaluationService.deleteRun(id);
+      setRuns((current) => current.filter((item) => item.id !== id));
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || error.message || "Could not delete evaluation report.");
+    }
+  };
+
+  return { queries, runs, models, loading, running, addQuery, updateQuery, removeQuery, startRun, resumeRun, cancelRun, deleteRun };
 }

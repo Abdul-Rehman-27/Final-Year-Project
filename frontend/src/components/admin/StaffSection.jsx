@@ -16,7 +16,7 @@ import StaffFormModal from "./StaffFormModal.jsx";
  * "Staff accounts" card: title, Add staff button, table with Edit buttons and the add/edit dialog.
  * Props come from the useStaff() hook. `limit` shows only the first N rows (used on Overview).
  */
-export default function StaffSection({ staff, loading, addStaff, updateStaff, limit }) {
+export default function StaffSection({ staff, loading, error, addStaff, updateStaff, limit }) {
   const { t } = useLanguage();
   const [modal, setModal] = useState({ open: false, member: null });
   const [notice, setNotice] = useState("");
@@ -87,6 +87,8 @@ export default function StaffSection({ staff, loading, addStaff, updateStaff, li
           {t("admin.addStaff")}
         </Button>
       </div>
+
+      {error && <div className="px-6 pb-4"><Alert>{t("admin.loadError")}</Alert></div>}
 
       {notice && (
         <div className="px-6 pb-4">

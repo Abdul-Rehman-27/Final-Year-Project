@@ -5,6 +5,7 @@ from app.api.deps import get_current_user
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.services.chatbot_admin import write_audit
 from app.schemas.auth import LoginRequest, PasswordResetConfirm, PasswordResetRequest, RegisterRequest, TokenResponse, UserOut
 from app.services import auth_service
 
@@ -35,6 +36,9 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email, password or role")
     except auth_service.AccountDisabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been disabled")
+    if user.role == "admin":
+        write_audit(db, user.id, "admin_login", "auth", {}, {"role": user.role})
+        db.commit()
     return _token_response(user)
 
 

@@ -4,14 +4,23 @@ import { permissionService } from "../services/permissionService.js";
 export default function usePermissions() {
   const [permissions, setPermissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const reload = useCallback(async () => {
-    setPermissions(await permissionService.list());
-    setLoading(false);
+    setLoading(true);
+    try {
+      setPermissions(await permissionService.list());
+      setError(false);
+    } catch (err) {
+      setError(true);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    reload();
+    reload().catch(() => {});
   }, [reload]);
 
   const addPermission = async (data) => {
@@ -27,5 +36,5 @@ export default function usePermissions() {
     await reload();
   };
 
-  return { permissions, loading, addPermission, updatePermission, removePermission };
+  return { permissions, loading, error, addPermission, updatePermission, removePermission };
 }

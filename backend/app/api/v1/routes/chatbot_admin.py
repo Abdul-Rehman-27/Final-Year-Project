@@ -1,9 +1,11 @@
 import csv
 import io
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
@@ -220,12 +222,63 @@ async def return_to_primary(user: User = Depends(require_roles("admin")), db: Se
     return {"active_model": state["active_model"], "config": state["config"]}
 
 
-@router.get("/audit-logs")
-async def get_admin_audit_logs(limit: int = Query(default=100, ge=1, le=500), user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
-    """List recent changes made to chatbot admin settings."""
+def _audit_query(db: Session, search: str | None, action: str | None, target: str | None, date_from: date | None, date_to: date | None):
     from app.models.chatbot import AdminAuditLog
-    from app.models.user import User
-    from sqlalchemy import select
 
-    rows = db.execute(select(AdminAuditLog, User.full_name, User.email).join(User, User.id == AdminAuditLog.admin_id).order_by(AdminAuditLog.created_at.desc()).limit(limit)).all()
-    return [{"id": audit.id, "admin_id": audit.admin_id, "admin_name": name, "admin_email": email, "action": audit.action, "target": audit.target, "old_value": audit.old_value, "new_value": audit.new_value, "created_at": audit.created_at.isoformat()} for audit, name, email in rows]
+    query = select(AdminAuditLog, User.full_name, User.email).outerjoin(User, User.id == AdminAuditLog.admin_id)
+    if search:
+        term = f"%{search.strip().lower()}%"
+        query = query.where(or_(func.lower(AdminAuditLog.action).like(term), func.lower(AdminAuditLog.target).like(term),
+                                func.lower(func.coalesce(User.full_name, "")).like(term), func.lower(func.coalesce(User.email, "")).like(term)))
+    if action:
+        query = query.where(AdminAuditLog.action == action)
+    if target:
+        query = query.where(func.lower(AdminAuditLog.target).like(f"%{target.strip().lower()}%"))
+    if date_from:
+        query = query.where(AdminAuditLog.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to:
+        query = query.where(AdminAuditLog.created_at < datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=timezone.utc))
+    return query
+
+
+def _audit_row(row):
+    audit, name, email = row
+    return {"id": audit.id, "admin_id": audit.admin_id, "admin_name": name or "Deleted admin", "admin_email": email or "",
+            "action": audit.action, "target": audit.target, "old_value": audit.old_value or {}, "new_value": audit.new_value or {},
+            "created_at": audit.created_at.isoformat()}
+
+
+@router.get("/audit-logs")
+def get_admin_audit_logs(
+    page: int = Query(default=1, ge=1), page_size: int = Query(default=25, ge=1, le=100),
+    search: str | None = Query(default=None, max_length=160), action: str | None = Query(default=None, max_length=100),
+    target: str | None = Query(default=None, max_length=160), date_from: date | None = None, date_to: date | None = None,
+    user: User = Depends(require_roles("admin")), db: Session = Depends(get_db),
+):
+    """Return a searchable, paginated history of persisted administrator actions."""
+    from app.models.chatbot import AdminAuditLog
+    query = _audit_query(db, search, action, target, date_from, date_to)
+    total = db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
+    rows = db.execute(query.order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).offset((page - 1) * page_size).limit(page_size)).all()
+    actions = db.scalars(select(AdminAuditLog.action).distinct().order_by(AdminAuditLog.action)).all()
+    return {"items": [_audit_row(row) for row in rows], "total": total, "page": page, "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size, "actions": actions}
+
+
+@router.get("/audit-logs/export")
+def export_admin_audit_logs(
+    search: str | None = Query(default=None, max_length=160), action: str | None = Query(default=None, max_length=100),
+    target: str | None = Query(default=None, max_length=160), date_from: date | None = None, date_to: date | None = None,
+    user: User = Depends(require_roles("admin")), db: Session = Depends(get_db),
+):
+    """Export all rows matching the current audit filters as CSV."""
+    from app.models.chatbot import AdminAuditLog
+    rows = db.execute(_audit_query(db, search, action, target, date_from, date_to).order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc()).limit(10000)).all()
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["id", "created_at", "admin_name", "admin_email", "action", "target", "old_value", "new_value"])
+    for row in rows:
+        item = _audit_row(row)
+        writer.writerow([item["id"], item["created_at"], item["admin_name"], item["admin_email"], item["action"], item["target"], item["old_value"], item["new_value"]])
+    output.seek(0)
+    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="cityhospital-audit-logs.csv"'})

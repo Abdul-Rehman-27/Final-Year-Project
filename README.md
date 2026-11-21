@@ -86,7 +86,7 @@ Patients register themselves from the Register tab. For password recovery, confi
 ## Admin portal
 Log in as **Admin** -> `/admin`: Overview, Staff, Departments, Roles, Permissions, Knowledge Base monitoring, Research evaluation, and audit log records.
 Reusable pieces: `components/layout/DashboardLayout` (sidebar shell for any role), `components/common/{Card,StatCard,Badge,DataTable,Modal,PageHeader}`.
-Most staff and administration pages still use mocked data; chatbot health, usage, model settings, and audit records use the backend.
+Staff accounts, departments, roles, permissions, overview totals, chatbot health and usage, research evaluation, and audit records are persisted through the backend.
 
 ## Languages
 The UI and the AI chatbot are bilingual only: **English and Urdu** (`en` / `ur`). No other languages are planned.
@@ -107,13 +107,14 @@ Screens under `/admin` (sidebar): Overview, Staff, **Departments**, **Roles**, *
 
 | Screen | What it does |
 |---|---|
-| Departments | Add / edit / delete departments. A department that still has staff cannot be deleted. |
-| Permissions | Add / edit / delete permissions (name, unique code, description). Starts with View, Create, Edit, Delete. Deleting one also removes it from every role. |
-| Roles | Add / edit / delete roles. Pick a role, switch permissions on/off, then *Save changes* - only switched-on permissions are active for that role. The 5 system roles (doctor, receptionist, pharmacist, nurse, admin) cannot be deleted. A role that has staff cannot be deleted. |
-| Staff (changed) | Add/Edit staff now has a **Department** field; the role list comes from the Roles screen; the table shows the department. |
-| Research evaluation | *Results*: run an evaluation, Top-1 accuracy EN vs UR, Urdu-English gap, ROUGE-L, by-category chart + table, summarizer metrics, incorrect answers, CSV export. *Benchmark dataset*: progress to 400 queries (200 EN + 200 UR), search/filter, add/edit/delete queries with ground truth, CSV export. |
+| Overview | Live doctor, patient, staff, and daily new-patient totals from PostgreSQL, plus recent staff accounts. |
+| Departments | Add / edit / delete persisted departments. A department that still has staff cannot be deleted. |
+| Permissions | Add / edit / delete persisted permissions (name, unique code, description). Starts with View, Create, Edit, Delete. Deleting one also removes its role assignments. |
+| Roles | Add / edit / delete roles and persist permission assignments. The five built-in roles (doctor, receptionist, pharmacist, nurse, admin) cannot be deleted. A role that has staff cannot be deleted. |
+| Staff | Create staff accounts with a generated temporary password, edit profile/department/status, and see persisted staff records. Role and department choices come from the database. |
+| Research evaluation | The benchmark dataset and model runs/results are stored in PostgreSQL. The report includes per-query output and timing, with CSV/PDF export. The Clinical summarizer section is unchanged. |
 
-Most admin pages still use mock data in `frontend/src/services/*Service.js` (in memory, resets on refresh). The Knowledge Base page uses the chatbot backend for live service health, model settings, and usage. Evaluation numbers are **simulated** until the real pipeline in `evaluation/` is connected.
+These admin data APIs are restricted to authenticated administrators and changes are written to the audit log. The role permission matrix is persisted for administration; enforcement for separate staff-specific application screens depends on those screens and routes being added.
 
 ## Chatbot backend integration
 

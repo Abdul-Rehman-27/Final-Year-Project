@@ -4,14 +4,23 @@ import { roleService } from "../services/roleService.js";
 export default function useRoles() {
   const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   const reload = useCallback(async () => {
-    setRoles(await roleService.list());
-    setLoading(false);
+    setLoading(true);
+    try {
+      setRoles(await roleService.list());
+      setError(false);
+    } catch (err) {
+      setError(true);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    reload();
+    reload().catch(() => {});
   }, [reload]);
 
   /** Returns the new role so the page can select it. */
@@ -33,5 +42,5 @@ export default function useRoles() {
     await reload();
   };
 
-  return { roles, loading, reload, addRole, updateRole, savePermissions, removeRole };
+  return { roles, loading, error, reload, addRole, updateRole, savePermissions, removeRole };
 }

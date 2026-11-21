@@ -1,45 +1,26 @@
-import { INITIAL_PERMISSIONS } from "../data/mockRbac.js";
-import { roleService } from "./roleService.js";
+import api from "./api.js";
 
-/**
- * MOCK permission service. A permission = { id, name, code, description }.
- * Backend later: GET/POST /admin/permissions, PUT/DELETE /admin/permissions/{id}.
- * Throws { code: "NAME_TAKEN" } or { code: "CODE_TAKEN" }.
- */
-let permissions = [...INITIAL_PERMISSIONS];
-const wait = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function assertUnique({ name, code }, ignoreId) {
-  const others = permissions.filter((p) => p.id !== ignoreId);
-  if (others.some((p) => p.name.toLowerCase() === name.toLowerCase())) throw { code: "NAME_TAKEN" };
-  if (others.some((p) => p.code === code)) throw { code: "CODE_TAKEN" };
+function mapPermissionError(error) {
+  const code = error?.response?.data?.detail;
+  if (["NAME_TAKEN", "CODE_TAKEN", "PERMISSION_NOT_FOUND"].includes(code)) throw Object.assign(new Error(code), { code });
+  throw error;
 }
 
 export const permissionService = {
   async list() {
-    await wait();
-    return permissions.map((p) => ({ ...p, roleCount: roleService.countUsingPermission(p.id) }));
+    try { return (await api.get("/admin/permissions")).data; }
+    catch (error) { mapPermissionError(error); }
   },
-
   async create(data) {
-    await wait();
-    assertUnique(data);
-    const permission = { id: Date.now(), ...data };
-    permissions = [...permissions, permission];
-    return permission;
+    try { return (await api.post("/admin/permissions", data)).data; }
+    catch (error) { mapPermissionError(error); }
   },
-
   async update(id, data) {
-    await wait();
-    assertUnique(data, id);
-    permissions = permissions.map((p) => (p.id === id ? { ...p, ...data } : p));
-    return permissions.find((p) => p.id === id);
+    try { return (await api.patch(`/admin/permissions/${id}`, data)).data; }
+    catch (error) { mapPermissionError(error); }
   },
-
-  /** Deleting a permission also removes it from every role that had it enabled. */
   async remove(id) {
-    await wait();
-    permissions = permissions.filter((p) => p.id !== id);
-    roleService.detachPermission(id);
+    try { await api.delete(`/admin/permissions/${id}`); }
+    catch (error) { mapPermissionError(error); }
   },
 };

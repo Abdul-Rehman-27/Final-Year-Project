@@ -19,8 +19,8 @@ import { roleName } from "../../utils/roles.js";
  */
 export default function AdminRoles() {
   const { t } = useLanguage();
-  const { roles, loading, addRole, updateRole, savePermissions, removeRole } = useRoles();
-  const { permissions } = usePermissions();
+  const { roles, loading, error: rolesError, addRole, updateRole, savePermissions, removeRole } = useRoles();
+  const { permissions, error: permissionsError } = usePermissions();
 
   const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState({ open: false, role: null });
@@ -72,6 +72,8 @@ export default function AdminRoles() {
           <Alert type="info">{notice}</Alert>
         </div>
       )}
+
+      {(rolesError || permissionsError) && <div className="mb-4"><Alert>{t("admin.loadError")}</Alert></div>}
 
       <div className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
         {/* Roles list */}

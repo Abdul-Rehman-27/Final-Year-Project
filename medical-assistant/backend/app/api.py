@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+import logging
 import re
 import time
 import uuid
@@ -17,6 +18,7 @@ from app.llm import chat, connectivity
 from app.security import require_scope
 
 router = APIRouter(prefix="/api/v1")
+logger = logging.getLogger(__name__)
 NO_DATA = "I couldn't find that information in the connected records. Please check with the hospital team or connect the relevant data source."
 SUMMARY_FIELDS = ["patient_overview", "chief_complaint", "medical_history", "surgical_history", "medications", "allergies", "family_history", "social_history", "vitals_and_results", "assessment_and_plan"]
 PATIENT_RECORD_TERMS = ("report", "prescription", "arrived", "status", "رپورٹ", "نسخہ", "پرچی")
@@ -50,6 +52,15 @@ class MessageRequest(BaseModel):
     groq_model: str | None = Field(default=None, max_length=160)
     ollama_model: str | None = Field(default=None, max_length=160)
     auto_fallback: bool = True
+
+
+class EvaluationRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=settings.MAX_MESSAGE_CHARS)
+    language: str = Field(pattern="^(en|ur)$")
+    category: str = Field(pattern="^(triage|diseaseDetection|doctorInfo|appointment|hospitalInfo)$")
+    provider: str = Field(pattern="^(groq|ollama)$")
+    model: str = Field(min_length=1, max_length=160)
+    labels: list[str] = Field(default_factory=list, max_length=200)
 
 
 class PatientRecord(BaseModel):
@@ -258,6 +269,86 @@ def get_history(conversation_id: str):
 @router.get("/health")
 async def health():
     return {"status": "ok", "models": await connectivity()}
+
+
+@router.post("/evaluation/respond", dependencies=[Depends(require_scope("chat:write"))])
+async def evaluation_response(payload: EvaluationRequest):
+    """Generate a label prediction with a model-reported confidence distribution."""
+    category_instructions = {
+        "triage": "Return the most appropriate hospital department for the described symptoms.",
+        "diseaseDetection": "Return the most likely disease or condition label from the symptoms.",
+        "doctorInfo": "Return the matching doctor specialty or information label.",
+        "appointment": "Return the appointment intent label (Book appointment, Cancel appointment, Reschedule appointment, Check availability, or View appointments).",
+        "hospitalInfo": "Return the hospital information topic label.",
+    }
+    language_name = "Urdu" if payload.language == "ur" else "English"
+    prompt = (
+        "You are answering one item from a hospital research benchmark. "
+        f"The question is written in {language_name}. {category_instructions[payload.category]} "
+        f"Choose labels only from this category's benchmark labels: {json.dumps(payload.labels, ensure_ascii=False)}. "
+        "Return a JSON object with this exact shape: {\"answer\": string, \"confidence\": number, "
+        "\"candidates\": [{\"label\": string, \"confidence\": number}], \"explanation\": string}. "
+        "The answer must be the single best label exactly as listed. Include up to three plausible candidate labels, "
+        "ranked from most to least likely, with each confidence as a number from 0 to 1 (for example 0.75 means 75%). "
+        "The first candidate must match answer. Confidence values are your estimates and should reflect uncertainty; "
+        "do not present them as clinically calibrated probabilities. Give a brief evidence summary, not hidden chain-of-thought. "
+        "Return only valid JSON."
+    )
+    messages = [{"role": "system", "content": prompt}, {"role": "user", "content": payload.query}]
+    for attempt in range(2):
+        try:
+            result = await chat(
+                messages,
+                max_tokens=512,
+                json_mode=True,
+                provider=payload.provider,
+                groq_model=payload.model if payload.provider == "groq" else None,
+                ollama_model=payload.model if payload.provider == "ollama" else None,
+                auto_fallback=False,
+                no_timeout=True,
+            )
+        except Exception as exc:
+            logger.exception("Evaluation generation failed for provider=%s model=%s", payload.provider, payload.model)
+            raise HTTPException(503, f"The selected model request failed ({type(exc).__name__}).") from exc
+        model_response = (result.get("text") or "").strip()
+        if model_response:
+            try:
+                parsed = json.loads(model_response)
+            except (json.JSONDecodeError, TypeError):
+                parsed = {}
+            answer = str(parsed.get("answer") or "").strip() if isinstance(parsed, dict) else ""
+            candidates = parsed.get("candidates", []) if isinstance(parsed, dict) else []
+            confidence_candidates = []
+            if isinstance(candidates, list):
+                for candidate in candidates[:3]:
+                    if not isinstance(candidate, dict) or not str(candidate.get("label", "")).strip():
+                        continue
+                    try:
+                        confidence = float(candidate.get("confidence"))
+                    except (TypeError, ValueError):
+                        continue
+                    confidence = confidence * 100 if 0 <= confidence <= 1 else confidence
+                    if 0 <= confidence <= 100:
+                        confidence_candidates.append({"label": str(candidate["label"]).strip(), "confidence": round(confidence, 1)})
+            try:
+                confidence = float(parsed.get("confidence")) if isinstance(parsed, dict) else None
+            except (TypeError, ValueError):
+                confidence = None
+            if confidence is not None and 0 <= confidence <= 1:
+                confidence *= 100
+            if confidence is None or not 0 <= confidence <= 100:
+                confidence = next((entry["confidence"] for entry in confidence_candidates if entry["label"] == answer), None)
+            if not answer:
+                answer = confidence_candidates[0]["label"] if confidence_candidates else model_response
+            if answer:
+                return {"answer": answer, "model_response": model_response,
+                    "explanation": str(parsed.get("explanation") or "").strip() if isinstance(parsed, dict) else "",
+                    "confidence": round(confidence, 1) if confidence is not None else None,
+                    "confidence_candidates": confidence_candidates,
+                    "provider": result.get("provider"), "model": result.get("model"),
+                    "finish_reason": result.get("finish_reason"), "usage": result.get("usage", {})}
+        logger.warning("Evaluation model returned empty content; retry=%s provider=%s model=%s", attempt + 1, payload.provider, payload.model)
+    raise HTTPException(502, "The selected model returned an empty answer twice. The query was not recorded as completed.")
 
 
 @router.post("/chat/sessions", dependencies=[Depends(require_scope("chat:write"))])

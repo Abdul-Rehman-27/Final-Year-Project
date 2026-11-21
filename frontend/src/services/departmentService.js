@@ -1,39 +1,26 @@
-import { INITIAL_DEPARTMENTS } from "../data/mockRbac.js";
-import { staffService } from "./staffService.js";
+import api from "./api.js";
 
-/**
- * MOCK department service (in memory, resets on refresh).
- * Backend later: GET/POST /admin/departments, PUT/DELETE /admin/departments/{id}.
- * Throws { code: "NAME_TAKEN" } or { code: "IN_USE" }.
- */
-let departments = [...INITIAL_DEPARTMENTS];
-const wait = (ms = 250) => new Promise((resolve) => setTimeout(resolve, ms));
-const nameTaken = (name, ignoreId) => departments.some((d) => d.id !== ignoreId && d.name.toLowerCase() === name.toLowerCase());
+function mapDepartmentError(error) {
+  const code = error?.response?.data?.detail;
+  if (["NAME_TAKEN", "IN_USE", "DEPARTMENT_NOT_FOUND"].includes(code)) throw Object.assign(new Error(code), { code });
+  throw error;
+}
 
 export const departmentService = {
   async list() {
-    await wait();
-    return departments.map((d) => ({ ...d, staffCount: staffService.countByDepartment(d.id) }));
+    try { return (await api.get("/admin/departments")).data; }
+    catch (error) { mapDepartmentError(error); }
   },
-
-  async create({ name, description }) {
-    await wait();
-    if (nameTaken(name)) throw { code: "NAME_TAKEN" };
-    const dept = { id: Date.now(), name, description };
-    departments = [...departments, dept];
-    return dept;
+  async create(data) {
+    try { return (await api.post("/admin/departments", data)).data; }
+    catch (error) { mapDepartmentError(error); }
   },
-
-  async update(id, { name, description }) {
-    await wait();
-    if (nameTaken(name, id)) throw { code: "NAME_TAKEN" };
-    departments = departments.map((d) => (d.id === id ? { ...d, name, description } : d));
-    return departments.find((d) => d.id === id);
+  async update(id, data) {
+    try { return (await api.patch(`/admin/departments/${id}`, data)).data; }
+    catch (error) { mapDepartmentError(error); }
   },
-
   async remove(id) {
-    await wait();
-    if (staffService.countByDepartment(id) > 0) throw { code: "IN_USE" };
-    departments = departments.filter((d) => d.id !== id);
+    try { await api.delete(`/admin/departments/${id}`); }
+    catch (error) { mapDepartmentError(error); }
   },
 };

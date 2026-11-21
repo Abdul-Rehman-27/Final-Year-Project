@@ -27,7 +27,7 @@ export default function AdminEvaluation() {
       <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       {tab === "results" ? (
-        <ResultsTab runs={evaluation.runs} running={evaluation.running} startRun={evaluation.startRun} />
+        <ResultsTab runs={evaluation.runs} models={evaluation.models} loading={evaluation.loading} running={evaluation.running} startRun={evaluation.startRun} resumeRun={evaluation.resumeRun} cancelRun={evaluation.cancelRun} deleteRun={evaluation.deleteRun} />
       ) : (
         <BenchmarkTab
           queries={evaluation.queries}

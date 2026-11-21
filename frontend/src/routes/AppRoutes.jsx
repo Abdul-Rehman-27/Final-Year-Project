@@ -9,8 +9,8 @@ import AdminOverview from "../pages/admin/AdminOverview.jsx";
 import AdminPermissions from "../pages/admin/AdminPermissions.jsx";
 import AdminRoles from "../pages/admin/AdminRoles.jsx";
 import AdminStaff from "../pages/admin/AdminStaff.jsx";
+import AdminAuditLogs from "../pages/admin/AdminAuditLogs.jsx";
 import AuthPage from "../pages/auth/AuthPage.jsx";
-import ComingSoon from "../pages/ComingSoon.jsx";
 import DashboardPlaceholder from "../pages/dashboards/DashboardPlaceholder.jsx";
 import PatientChat from "../pages/dashboards/PatientChat.jsx";
 import NotFound from "../pages/NotFound.jsx";
@@ -42,7 +42,7 @@ export default function AppRoutes() {
         <Route path="permissions" element={<AdminPermissions />} />
         <Route path="evaluation" element={<AdminEvaluation />} />
         <Route path="knowledge-base" element={<AdminKnowledgeBase />} />
-        <Route path="audit-logs" element={<ComingSoon titleKey="admin.nav.auditLogs" />} />
+        <Route path="audit-logs" element={<AdminAuditLogs />} />
       </Route>
 
       <Route path="*" element={<NotFound />} />

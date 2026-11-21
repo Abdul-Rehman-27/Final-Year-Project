@@ -13,7 +13,7 @@ import useDepartments from "../../hooks/useDepartments.js";
 /** Admin > Departments: define, edit and delete hospital departments. */
 export default function AdminDepartments() {
   const { t } = useLanguage();
-  const { departments, loading, addDepartment, updateDepartment, removeDepartment } = useDepartments();
+  const { departments, loading, error, addDepartment, updateDepartment, removeDepartment } = useDepartments();
   const [form, setForm] = useState({ open: false, department: null });
   const [toDelete, setToDelete] = useState(null);
   const [notice, setNotice] = useState("");
@@ -77,6 +77,8 @@ export default function AdminDepartments() {
             <Alert type="info">{notice}</Alert>
           </div>
         )}
+
+        {error && <div className="px-6 pb-4"><Alert>{t("admin.loadError")}</Alert></div>}
 
         <DataTable
           columns={columns}

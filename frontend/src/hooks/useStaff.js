@@ -5,14 +5,16 @@ import { staffService } from "../services/staffService.js";
 export default function useStaff() {
   const [staff, setStaff] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     staffService.list().then((data) => {
-      if (active) {
-        setStaff(data);
-        setLoading(false);
-      }
+      if (active) setStaff(data);
+    }).catch(() => {
+      if (active) setError("load_failed");
+    }).finally(() => {
+      if (active) setLoading(false);
     });
     return () => {
       active = false;
@@ -22,13 +24,15 @@ export default function useStaff() {
   const addStaff = async (data) => {
     const { member, tempPassword } = await staffService.create(data);
     setStaff((prev) => [member, ...prev]);
+    setError("");
     return tempPassword;
   };
 
   const updateStaff = async (id, data) => {
     const member = await staffService.update(id, data);
     setStaff((prev) => prev.map((s) => (s.id === id ? member : s)));
+    setError("");
   };
 
-  return { staff, loading, addStaff, updateStaff };
+  return { staff, loading, error, addStaff, updateStaff };
 }

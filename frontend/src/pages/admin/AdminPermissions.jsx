@@ -13,7 +13,7 @@ import usePermissions from "../../hooks/usePermissions.js";
 /** Admin > Permissions: define, edit and delete the permissions that can be given to roles. */
 export default function AdminPermissions() {
   const { t } = useLanguage();
-  const { permissions, loading, addPermission, updatePermission, removePermission } = usePermissions();
+  const { permissions, loading, error, addPermission, updatePermission, removePermission } = usePermissions();
   const [form, setForm] = useState({ open: false, permission: null });
   const [toDelete, setToDelete] = useState(null);
   const [notice, setNotice] = useState("");
@@ -85,6 +85,8 @@ export default function AdminPermissions() {
             <Alert type="info">{notice}</Alert>
           </div>
         )}
+
+        {error && <div className="px-6 pb-4"><Alert>{t("admin.loadError")}</Alert></div>}
 
         <DataTable
           columns={columns}
