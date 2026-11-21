@@ -76,6 +76,37 @@ class LoginRequest(BaseModel):
         return v.lower()
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    role: Literal["patient", "admin"]
+
+    @field_validator("email")
+    @classmethod
+    def _email(cls, v: str) -> str:
+        return v.lower()
+
+
+class PasswordResetConfirm(BaseModel):
+    challenge_id: str = Field(min_length=32, max_length=64)
+    code: str = Field(pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=8, max_length=64)
+
+    @field_validator("new_password")
+    @classmethod
+    def _password(cls, v: str) -> str:
+        checks = [
+            (r"\s", False, "Password must not contain spaces"),
+            (r"[a-z]", True, "Password needs a lowercase letter"),
+            (r"[A-Z]", True, "Password needs an uppercase letter"),
+            (r"\d", True, "Password needs a number"),
+            (r"[^A-Za-z0-9\s]", True, "Password needs a special character"),
+        ]
+        for pattern, must_match, message in checks:
+            if bool(re.search(pattern, v)) != must_match:
+                raise ValueError(message)
+        return v
+
+
 class UserOut(BaseModel):
     id: int
     full_name: str

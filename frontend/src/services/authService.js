@@ -18,4 +18,18 @@ export const authService = {
     });
     return data;
   },
+
+  async requestPasswordReset(email, role) {
+    const { data } = await api.post("/auth/password-reset/request", { email, role });
+    return data;
+  },
+
+  async confirmPasswordReset(challengeId, code, newPassword) {
+    const { data } = await api.post("/auth/password-reset/confirm", {
+      challenge_id: challengeId,
+      code,
+      new_password: newPassword,
+    });
+    return data;
+  },
 };

@@ -37,11 +37,12 @@ Install Docker Desktop (or Docker Engine with the Compose plugin), then from the
 ```bash
 cp backend/.env.example backend/.env
 cp medical-assistant/.env.example medical-assistant/.env
+cp .env.example .env
 # Add your GroqCloud key to backend/.env if you want to use Groq.
 docker compose up --build
 ```
 
-Compose is the one-command orchestrator; it builds and runs five separate containers and waits for the database and APIs to become healthy:
+Compose builds and runs five containers: PostgreSQL, the CityHospital API and frontend, and the Medical Assistant API and frontend. Ollama runs on each developer's host computer, outside Docker. Install Ollama and pull the model configured by `OLLAMA_MODEL` before starting the project.
 
 | Service | Address |
 |---|---|
@@ -51,9 +52,9 @@ Compose is the one-command orchestrator; it builds and runs five separate contai
 | Medical Assistant API docs | <http://localhost:8010/docs> |
 | PostgreSQL (from host tools) | `localhost:5434` |
 
-The CityHospital API seeds the admin and demo doctor at startup. Sign in with the seed account below. PostgreSQL data is kept in the `pgdata` Docker volume when containers stop or are rebuilt. Use `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. If host port 5434 is already taken, set `POSTGRES_HOST_PORT` in a root `.env` file to another free port. To stop the stack, press Ctrl+C in the Compose terminal or run `docker compose down` from another terminal.
+The CityHospital API seeds the admin and demo doctor at startup. Sign in with the seed account below. PostgreSQL data is kept in the `pgdata` Docker volume. Use `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. Set `OLLAMA_MODEL` in the root `.env` to a model installed on the host; the default is `gemma3:4b`. If host port 5434 is already taken, set `POSTGRES_HOST_PORT` in the root `.env` to another free port.
 
-The Medical Assistant container can reach Ollama running on the host at `http://host.docker.internal:11434` by default. If needed, set `OLLAMA_BASE_URL` in the root `.env` file. Provider API keys belong in backend `.env` files, never in frontend files.
+On Linux, the host Ollama service normally listens only on localhost. To let containers reach it, configure the service with `OLLAMA_HOST=0.0.0.0:11434`, then restart Ollama. On macOS or Windows with Docker Desktop, use the platform's Ollama environment-variable setup and restart the app. Confirm `curl http://127.0.0.1:11434/api/tags` works on the host and `http://host.docker.internal:11434/api/tags` is reachable from the Medical Assistant container. Provider API keys belong in backend `.env` files, never in frontend files.
 
 ## Run (manually)
 **Backend** (Python 3.11, PostgreSQL running with the DB from `.env`):
@@ -78,9 +79,9 @@ npm run dev
 ## Seed accounts (change in production)
 | Role   | Email                        | Password      |
 |--------|------------------------------|---------------|
-| Admin  | admin@cityhospital.pk        | Admin@12345   |
+| Admin  | harooonijaz123@gmail.com     | Admin@12345   |
 | Doctor | imran.malik@cityhospital.pk  | Doctor@12345  |
-Patients register themselves from the Register tab. Set `GROQ_API_KEY` in `backend/.env` for GroqCloud, or configure a reachable Ollama service; do not put provider keys in frontend files.
+Patients register themselves from the Register tab. For password recovery, configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_FROM_EMAIL` in `backend/.env`. SMTP credentials and provider keys belong on the backend, never in frontend files. Set `GROQ_API_KEY` there for GroqCloud, or configure a reachable Ollama service.
 
 ## Admin portal
 Log in as **Admin** -> `/admin`: Overview, Staff, Departments, Roles, Permissions, Knowledge Base monitoring, Research evaluation, and audit log records.
@@ -92,7 +93,7 @@ The UI and the AI chatbot are bilingual only: **English and Urdu** (`en` / `ur`)
 
 ## Validation rules (frontend zod + backend pydantic, kept identical)
 - Name 3-50 chars, letters/spaces/. ' - (English or Urdu)
-- Email valid format, stored lowercase, unique
+- Email valid format, stored lowercase, unique within each role (a patient and admin may share an address)
 - Mobile `03XXXXXXXXX` or `+923XXXXXXXXX` (spaces/dashes allowed)
 - DOB in the past, max 120 years
 - Gender required; password 8-64 chars with upper, lower, number, special, no spaces; confirm must match

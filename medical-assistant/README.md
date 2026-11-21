@@ -47,7 +47,7 @@ cp medical-assistant/.env.example medical-assistant/.env
 docker compose up --build
 ```
 
-This starts PostgreSQL, the CityHospital API and frontend, and this Medical Assistant API and frontend as separate containers. Open the standalone assistant at <http://localhost:5174>; its API docs are at <http://localhost:8010/docs>. The CityHospital app is at <http://localhost:5173>. Compose creates and retains a named PostgreSQL volume across restarts. Run `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. See the root README for all service addresses and configuration details.
+This starts PostgreSQL, the CityHospital API and frontend, and this Medical Assistant API and frontend as separate containers. Ollama runs on the host and must have the model named by `OLLAMA_MODEL` installed. Open the standalone assistant at <http://localhost:5174>; its API docs are at <http://localhost:8010/docs>. The CityHospital app is at <http://localhost:5173>. Run `docker compose down` to stop the stack; `docker compose down -v` also deletes the database volume. See the root README for configuration details.
 
 ### Run only the Medical Assistant manually
 

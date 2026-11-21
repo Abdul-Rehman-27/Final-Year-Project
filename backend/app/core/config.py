@@ -13,8 +13,16 @@ class Settings(BaseSettings):
     MEDICAL_ASSISTANT_API_KEY: str = ""
     GROQ_MONTHLY_TOKEN_LIMIT: int = 0
 
-    SEED_ADMIN_EMAIL: str = "admin@cityhospital.pk"
+    SEED_ADMIN_EMAIL: str = "harooonijaz123@gmail.com"
     SEED_ADMIN_PASSWORD: str = "Admin@12345"
+
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_USE_TLS: bool = True
+    PASSWORD_RESET_CODE_TTL_MINUTES: int = 10
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

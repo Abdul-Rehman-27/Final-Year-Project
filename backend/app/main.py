@@ -12,6 +12,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.db.session import engine, SessionLocal
 from app.db.migrations.v001_chatbot_admin import upgrade as migrate_chatbot_admin
+from app.db.migrations.v002_role_scoped_user_email import upgrade as migrate_role_scoped_user_email
 from app.models.user import User
 from app.core.security import decode_access_token
 from app.services.admin_health import monitor_services
@@ -22,6 +23,7 @@ from app.services.websocket_manager import manager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Apply the chatbot admin schema upgrade and start one server-side health monitor.
+    migrate_role_scoped_user_email(engine)
     migrate_chatbot_admin(engine)
     health_task = asyncio.create_task(monitor_services())
     yield

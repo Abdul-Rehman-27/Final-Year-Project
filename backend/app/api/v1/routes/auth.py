@@ -5,7 +5,7 @@ from app.api.deps import get_current_user
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserOut
+from app.schemas.auth import LoginRequest, PasswordResetConfirm, PasswordResetRequest, RegisterRequest, TokenResponse, UserOut
 from app.services import auth_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -36,6 +36,25 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     except auth_service.AccountDisabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been disabled")
     return _token_response(user)
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(payload: PasswordResetRequest, db: Session = Depends(get_db)):
+    try:
+        challenge_id = auth_service.begin_password_reset(db, payload.email, payload.role)
+    except RuntimeError:
+        # Do not reveal whether the email exists when SMTP is unavailable.
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Unable to send a verification code right now")
+    except Exception:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Unable to send a verification code right now")
+    return {"challenge_id": challenge_id, "message": "If the account is eligible, a verification code has been sent."}
+
+
+@router.post("/password-reset/confirm")
+def confirm_password_reset(payload: PasswordResetConfirm, db: Session = Depends(get_db)):
+    if not auth_service.complete_password_reset(db, payload.challenge_id, payload.code, payload.new_password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The verification code is invalid or expired")
+    return {"message": "Password updated successfully"}
 
 
 @router.get("/me", response_model=UserOut)

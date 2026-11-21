@@ -27,6 +27,7 @@ services:
     environment:
       MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:4b}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
