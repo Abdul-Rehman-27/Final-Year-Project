@@ -1,9 +1,79 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { doctorPortalService } from "../services/doctorPortalService.js";
+
 export default function useDoctorQueue() {
-  const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null),[serverOffset,setServerOffset]=useState(0), timer=useRef(null);
-  const refresh=useCallback(async()=>{try{const result=await doctorPortalService.getQueue();setData(result);setServerOffset(Date.parse(result.server_now)-Date.now());setError(null);return result;}catch(e){setError(e);throw e;}finally{setLoading(false);}},[]);
-  useEffect(()=>{let active=true;const load=async()=>{try{const result=await doctorPortalService.getQueue();if(active){setData(result);setServerOffset(Date.parse(result.server_now)-Date.now());setError(null);}}catch(e){if(active)setError(e);}finally{if(active)setLoading(false);}};const tick=()=>{clearTimeout(timer.current);if(document.visibilityState==="visible"){load().finally(()=>{timer.current=setTimeout(tick,10000);});}else timer.current=setTimeout(tick,10000);};load().finally(()=>{timer.current=setTimeout(tick,10000);});const vis=()=>{if(document.visibilityState==="visible")load();};document.addEventListener("visibilitychange",vis);return()=>{active=false;clearTimeout(timer.current);document.removeEventListener("visibilitychange",vis);};},[]);
-  const action=useCallback(async(fn,...args)=>{try{const value=await fn(...args);await refresh();return value;}catch(e){await refresh().catch(()=>{});throw e;}},[refresh]);
-  return {data,loading,error,serverOffset,refresh,checkIn:(id)=>action(doctorPortalService.checkIn,id),setVisitStatus:(id,status)=>action(doctorPortalService.setVisitStatus,id,status)};
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [serverOffset, setServerOffset] = useState(0);
+  const mounted = useRef(false);
+  const refreshRef = useRef(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const result = await doctorPortalService.getQueue();
+      if (mounted.current) {
+        setData(result);
+        setServerOffset(Date.parse(result.server_now) - Date.now());
+        setError(null);
+      }
+      return result;
+    } catch (err) {
+      if (mounted.current) setError(err);
+      throw err;
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
+  refreshRef.current = refresh;
+
+  useEffect(() => {
+    mounted.current = true;
+    let active = true;
+    let timer = null;
+    let polling = false;
+
+    const poll = async () => {
+      if (!active || document.visibilityState !== "visible" || polling) return;
+      polling = true;
+      try {
+        await refreshRef.current();
+      } catch {
+        // The hook exposes the error for the screen's retry state.
+      } finally {
+        polling = false;
+        if (active && document.visibilityState === "visible") timer = setTimeout(poll, 10000);
+      }
+    };
+    const onVisibilityChange = () => {
+      clearTimeout(timer);
+      timer = null;
+      if (document.visibilityState === "visible") void poll();
+    };
+
+    void poll();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      mounted.current = false;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, []);
+
+  const runAction = useCallback(async (action, ...args) => {
+    try {
+      const result = await action(...args);
+      await refresh();
+      return result;
+    } catch (err) {
+      await refresh().catch(() => {});
+      throw err;
+    }
+  }, [refresh]);
+
+  const checkIn = useCallback((id) => runAction((value) => doctorPortalService.checkIn(value), id), [runAction]);
+  const setVisitStatus = useCallback((id, visitStatus) => runAction((value, status) => doctorPortalService.setVisitStatus(value, status), id, visitStatus), [runAction]);
+
+  return { data, loading, error, serverOffset, refresh, checkIn, setVisitStatus };
 }
