@@ -2,7 +2,7 @@
  * Simple reusable table.
  * columns: [{ header: "Name", render: (row) => row.name, className?: "text-end" }]
  */
-export default function DataTable({ columns, rows, rowKey = "id", loading, loadingText, emptyText }) {
+export default function DataTable({ columns, rows, rowKey = "id", loading, loadingText, emptyText, dense = false, onRowClick }) {
   if (loading) return <p className="px-6 py-8 text-ink-muted">{loadingText}</p>;
   if (!rows.length) return <p className="px-6 py-8 text-ink-muted">{emptyText}</p>;
 
@@ -20,9 +20,9 @@ export default function DataTable({ columns, rows, rowKey = "id", loading, loadi
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row[rowKey]} className="border-b border-line last:border-0">
+            <tr key={row[rowKey]} onClick={onRowClick ? () => onRowClick(row) : undefined} onKeyDown={onRowClick ? (e) => { if (e.key === "Enter") onRowClick(row); } : undefined} tabIndex={onRowClick ? 0 : undefined} className={`border-b border-line last:border-0 ${onRowClick ? "cursor-pointer hover:bg-brand-50" : ""}`}>
               {columns.map((col, i) => (
-                <td key={i} className={`px-6 py-4 ${col.className || ""}`}>
+                <td key={i} className={`${dense ? "px-2 py-3" : "px-6 py-4"} ${col.className || ""}`}>
                   {col.render(row)}
                 </td>
               ))}

@@ -1,0 +1,3 @@
+import { useCallback, useEffect, useState } from "react";
+import { doctorPortalService } from "../services/doctorPortalService.js";
+export default function useDoctorDashboard(){const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null);const refresh=useCallback(async()=>{setLoading(true);try{setData(await doctorPortalService.getDashboard());setError(null);}catch(e){setError(e);}finally{setLoading(false);}},[]);useEffect(()=>{let active=true;doctorPortalService.getDashboard().then(x=>active&&setData(x)).catch(e=>active&&setError(e)).finally(()=>active&&setLoading(false));return()=>{active=false};},[]);return {data,loading,error,refresh};}

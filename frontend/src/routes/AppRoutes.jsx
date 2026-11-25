@@ -15,6 +15,17 @@ import DashboardPlaceholder from "../pages/dashboards/DashboardPlaceholder.jsx";
 import PatientChat from "../pages/dashboards/PatientChat.jsx";
 import NotFound from "../pages/NotFound.jsx";
 import ProtectedRoute from "./ProtectedRoute.jsx";
+import DoctorShell from "../components/doctor/DoctorShell.jsx";
+import DoctorDashboard from "../pages/doctor/DoctorDashboard.jsx";
+import DoctorAvailability from "../pages/doctor/DoctorAvailability.jsx";
+import DoctorQueue from "../pages/doctor/DoctorQueue.jsx";
+import DoctorAppointment from "../pages/doctor/DoctorAppointment.jsx";
+import DoctorSummary from "../pages/doctor/DoctorSummary.jsx";
+import DoctorWritePrescription from "../pages/doctor/DoctorWritePrescription.jsx";
+import DoctorPrescriptions from "../pages/doctor/DoctorPrescriptions.jsx";
+import DoctorPatients from "../pages/doctor/DoctorPatients.jsx";
+import DoctorPatientProfile from "../pages/doctor/DoctorPatientProfile.jsx";
+import DoctorLabTests from "../pages/doctor/DoctorLabTests.jsx";
 
 export default function AppRoutes() {
   return (
@@ -24,7 +35,19 @@ export default function AppRoutes() {
       <Route path="/register" element={<AuthPage mode="register" />} />
 
       <Route path="/patient" element={<ProtectedRoute role="patient"><PatientChat /></ProtectedRoute>} />
-      <Route path="/doctor" element={<ProtectedRoute role="doctor"><DashboardPlaceholder role="doctor" /></ProtectedRoute>} />
+      <Route path="/doctor" element={<ProtectedRoute role="doctor"><DoctorShell /></ProtectedRoute>}>
+        <Route index element={<DoctorDashboard />} />
+        <Route path="availability" element={<DoctorAvailability />} />
+        <Route path="queue" element={<DoctorQueue />} />
+        <Route path="queue/:appointmentId" element={<DoctorAppointment />} />
+        <Route path="queue/:appointmentId/summary" element={<DoctorSummary />} />
+        <Route path="queue/:appointmentId/prescription/new" element={<DoctorWritePrescription />} />
+        <Route path="prescriptions" element={<DoctorPrescriptions />} />
+        <Route path="patients" element={<DoctorPatients />} />
+        <Route path="patients/:patientId" element={<DoctorPatientProfile />} />
+        <Route path="patients/:patientId/summary" element={<DoctorSummary />} />
+        <Route path="lab-tests" element={<DoctorLabTests />} />
+      </Route>
 
       {/* Admin portal: sidebar layout + nested pages */}
       <Route

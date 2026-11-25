@@ -7,7 +7,7 @@ import Sidebar from "./Sidebar.jsx";
  * Shared shell for every role's dashboard: sidebar + language switch + page content.
  * Pass the role's menu as `navItems`; child routes render inside <Outlet />.
  */
-export default function DashboardLayout({ navItems }) {
+export default function DashboardLayout({ navItems, variant, portalLabel, userCard }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
@@ -15,7 +15,7 @@ export default function DashboardLayout({ navItems }) {
     <div className="min-h-screen bg-surface lg:flex">
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 border-e border-line bg-white lg:sticky lg:top-0 lg:block lg:h-screen">
-        <Sidebar items={navItems} />
+        <Sidebar items={navItems} portalLabel={portalLabel} userCard={userCard} />
       </aside>
 
       {/* Mobile sidebar (slides over the page) */}
@@ -23,13 +23,13 @@ export default function DashboardLayout({ navItems }) {
         <div className="fixed inset-0 z-40 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={closeMenu} aria-hidden="true" />
           <aside className="absolute inset-y-0 start-0 w-64 bg-white">
-            <Sidebar items={navItems} onNavigate={closeMenu} />
+            <Sidebar items={navItems} onNavigate={closeMenu} portalLabel={portalLabel} userCard={userCard} />
           </aside>
         </div>
       )}
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between px-4 py-4 sm:px-8">
+        <div className={`flex items-center justify-between px-4 py-4 sm:px-8 ${variant === "portal" ? "lg:hidden" : ""}`}>
           <button
             onClick={() => setMenuOpen(true)}
             aria-label="Open menu"

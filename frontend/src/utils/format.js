@@ -4,3 +4,4 @@ export const score = (v) => (v == null ? "-" : v.toFixed(3));
 export const signed = (v) => (v == null ? "-" : `${v > 0 ? "+" : ""}${v.toFixed(1)}`);
 /** Badge tone for an Urdu-English gap (bigger gap = worse). */
 export const gapTone = (v) => (v == null ? "neutral" : v >= 15 ? "danger" : v >= 8 ? "warning" : "success");
+export function fill(template, values = {}) { return String(template).replace(/\{([^}]+)\}/g, (_, key) => values[key] ?? ""); }
