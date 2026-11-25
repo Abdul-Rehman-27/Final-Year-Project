@@ -1,14 +1,32 @@
+const SLOT_LENGTHS = [15, 30, 45];
+const TIME_PATTERN = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function minutesOf(time) {
+  if (!TIME_PATTERN.test(time || "")) return NaN;
+  const [hours, minutes] = time.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
 export function expandWindow(start, end, slotMinutes) {
-  if (!start || !end || ![15,30,45].includes(Number(slotMinutes))) return [];
-  const minutes = (time) => { const [h,m]=time.split(":").map(Number); return h*60+m; };
-  const from=minutes(start), to=minutes(end), result=[];
-  for (let t=from; t+Number(slotMinutes)<=to; t+=Number(slotMinutes)) result.push(`${String(Math.floor(t/60)).padStart(2,"0")}:${String(t%60).padStart(2,"0")}`);
+  const interval = Number(slotMinutes);
+  const from = minutesOf(start);
+  const to = minutesOf(end);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || !SLOT_LENGTHS.includes(interval) || from >= to) return [];
+  const result = [];
+  for (let time = from; time + interval <= to; time += interval) {
+    result.push(`${String(Math.floor(time / 60)).padStart(2, "0")}:${String(time % 60).padStart(2, "0")}`);
+  }
   return result;
 }
+
 export function validateDay(day) {
-  if (!day.is_active) return null;
-  if (!day.start_time || !day.end_time || day.start_time >= day.end_time) return "doctor.availability.endAfterStart";
-  if (!expandWindow(day.start_time,day.end_time,day.slot_minutes).length) return "doctor.availability.slotDoesNotFit";
-  if ((day.room_label || "").length > 40) return "doctor.availability.roomTooLong";
+  if (!day?.is_active) return null;
+  const start = minutesOf(day.start_time);
+  const end = minutesOf(day.end_time);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return "doctor.availability.endAfterStart";
+  if (!SLOT_LENGTHS.includes(Number(day.slot_minutes)) || end - start < Number(day.slot_minutes)) {
+    return "doctor.availability.slotDoesNotFit";
+  }
+  if (typeof day.room_label !== "string" || day.room_label.length > 40) return "doctor.availability.roomTooLong";
   return null;
 }
