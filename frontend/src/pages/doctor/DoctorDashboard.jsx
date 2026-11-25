@@ -1,9 +1,198 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import PageHeader from "../../components/common/PageHeader.jsx";import Card from "../../components/common/Card.jsx";import StatCard from "../../components/common/StatCard.jsx";import Tabs from "../../components/common/Tabs.jsx";import Avatar from "../../components/common/Avatar.jsx";import DataTable from "../../components/common/DataTable.jsx";import Button from "../../components/common/Button.jsx";
-import { useLanguage } from "../../context/LanguageContext.jsx";import { useDoctorContext } from "../../context/DoctorContext.jsx";import useDoctorDashboard from "../../hooks/useDoctorDashboard.js";import { LoadState,Status } from "../../components/doctor/DoctorCommon.jsx";import { formatShort,formatTime,formatDate,dayPart } from "../../utils/datetime.js";import { fill } from "../../utils/format.js";
-export default function DoctorDashboard(){const {t,lang}=useLanguage(),{profile,hospital}=useDoctorContext(),{data,loading,error,refresh}=useDoctorDashboard(),[tab,setTab]=useState("today");const tz=hospital.timezone||"Asia/Karachi";const name=(profile.full_name||"").replace(/^Dr\.\s*/i,"").trim().split(/\s+/).slice(-1)[0];const now=data?.server_now||new Date().toISOString();const first=tab==="today"?data?.today||[]:data?.upcoming||[];const stats=data?.stats||{};const breakdown=stats.today_breakdown||{};
-return <LoadState loading={loading||(!data&&!error)} error={error} onRetry={refresh}>{data&&<><PageHeader showLanguage title={fill(t(`doctor.dashboard.${dayPart(Date.parse(now),tz)}`),{name})} subtitle={fill(t("doctor.dashboard.subtitle"),{date:formatShort(now,lang,tz).split(" · ")[0]})}/><div className="mb-6 grid gap-4 lg:grid-cols-3"><StatCard value={stats.total_patients??0} label={t("doctor.dashboard.totalPatients")}/><StatCard value={stats.appointments_today??0} label={t("doctor.dashboard.appointmentsToday")} detail={fill(t("doctor.dashboard.breakdown"),{a:breakdown.in_progress||0,b:breakdown.waiting||0,c:breakdown.later||0})}/><StatCard value={stats.in_queue_now??0} label={t("doctor.dashboard.inQueue")} detail={stats.next_waiting?fill(t("doctor.dashboard.next"),stats.next_waiting):t("doctor.dashboard.nobodyWaiting")}/></div>
-<div className="mb-6 grid gap-5 lg:grid-cols-[2fr_1fr]"><Card className="p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-black">{t("doctor.dashboard.appointments")}</h2><Tabs variant="pill" tabs={[{id:"today",label:t("doctor.dashboard.today")},{id:"upcoming",label:t("doctor.dashboard.upcoming")}]} active={tab} onChange={setTab}/></div>{first.length?first.map(a=><Link key={a.id} to={`/doctor/queue/${a.id}`} className="flex items-center gap-3 border-b border-line py-3 last:border-0"><Avatar name={a.patient_name}/><span className="min-w-0 flex-1"><b className="block">{a.patient_name}</b><small className="text-ink-muted">{tab==="today"?formatTime(a.starts_at,tz):formatShort(a.starts_at,lang,tz)} · {a.reason||"—"}</small></span><Status value={a.queue_state==="none"?a.status:a.queue_state}/></Link>):<p className="py-8 text-ink-muted">{t(tab==="today"?"doctor.dashboard.noToday":"doctor.dashboard.noUpcoming")}</p>}</Card>
-<Card className="p-5"><div className="mb-3 flex items-center justify-between"><h2 className="text-xl font-black">{t("doctor.dashboard.availability")}</h2><Link to="/doctor/availability"><Button size="sm" variant="secondary" fullWidth={false}>{t("doctor.dashboard.edit")}</Button></Link></div>{(data.schedule||[]).map((d)=><div key={d.weekday} className="flex justify-between border-b border-line py-2 last:border-0"><b>{new Intl.DateTimeFormat(lang==="ur"?"ur-PK":"en-GB",{weekday:"short",timeZone:tz}).format(new Date(now+((d.weekday+1)*86400000)))}</b><span>{d.is_active?`${d.start_time} – ${d.end_time} · ${d.slot_minutes} min`:t("doctor.availability.off")}</span></div>)}</Card></div>
-<div className="grid gap-5 lg:grid-cols-2">{[["doctor.dashboard.recentTests",data.recent_tests,"doctor.dashboard.noTests","/doctor/lab-tests"],["doctor.dashboard.recentRx",data.recent_prescriptions,"doctor.dashboard.noRx","/doctor/prescriptions"]].map(([heading,rows,empty,to],i)=><Card key={heading} className="p-5"><div className="mb-3 flex justify-between"><h2 className="text-xl font-black">{t(heading)}</h2><Link className="font-bold text-brand-700" to={to}>{t("doctor.dashboard.viewAll")}</Link></div><DataTable dense columns={[{header:i?t("doctor.dashboard.rx"):t("doctor.dashboard.test"),render:r=>i?<b dir="ltr">{r.rx_no}</b>:r.test_name},{header:t("doctor.dashboard.patient"),render:r=>r.patient_name},{header:t("doctor.dashboard.date"),render:r=>i?r.issued_on:formatDate(r.created_at,lang,tz)},{header:t("doctor.common.status"),render:r=><Status value={r.status}/> }]} rows={rows||[]} emptyText={t(empty)}/></Card>)}</div></>}</LoadState>}
+import Avatar from "../../components/common/Avatar.jsx";
+import Badge from "../../components/common/Badge.jsx";
+import Button from "../../components/common/Button.jsx";
+import Card from "../../components/common/Card.jsx";
+import DataTable from "../../components/common/DataTable.jsx";
+import PageHeader from "../../components/common/PageHeader.jsx";
+import StatCard from "../../components/common/StatCard.jsx";
+import Tabs from "../../components/common/Tabs.jsx";
+import { useDoctorContext } from "../../context/DoctorContext.jsx";
+import { useLanguage } from "../../context/LanguageContext.jsx";
+import useDoctorDashboard from "../../hooks/useDoctorDashboard.js";
+import { fill } from "../../utils/format.js";
+import { dayPart, formatDate, formatDay, formatShort, formatTime } from "../../utils/datetime.js";
+import { LoadState, Status } from "../../components/doctor/DoctorCommon.jsx";
+
+const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const appointmentStatuses = {
+  in_progress: ["doctor.status.visit.in_progress", "success"],
+  waiting: ["doctor.status.visit.waiting", "success"],
+  holding: ["doctor.status.visit.not_arrived", "warning"],
+  later: ["doctor.status.visit.not_arrived", "warning"],
+  grace_expired: ["doctor.status.visit.not_arrived", "warning"],
+  completed: ["doctor.status.visit.completed", "neutral"],
+  incomplete: ["doctor.status.visit.incomplete", "danger"],
+  pending: ["doctor.status.appt.pending", "warning"],
+  confirmed: ["doctor.status.appt.confirmed", "success"],
+  cancelled: ["doctor.status.appt.cancelled", "danger"],
+};
+
+function AppointmentBadge({ appointment }) {
+  const { t } = useLanguage();
+  const status = appointment.queue_state === "none" ? appointment.status : appointment.queue_state;
+  const [key, tone] = appointmentStatuses[status] || ["doctor.status.appt.confirmed", "success"];
+  return <Badge tone={tone}>{t(key)}</Badge>;
+}
+
+function shortDate(iso, lang, tz) {
+  return formatDate(iso, lang, tz).split(" ").slice(0, 2).join(" ");
+}
+
+export default function DoctorDashboard() {
+  const { t, lang } = useLanguage();
+  const { profile, hospital } = useDoctorContext();
+  const { data, loading, error, reload } = useDoctorDashboard();
+  const [tab, setTab] = useState("today");
+  const tz = hospital.timezone || "Asia/Karachi";
+  const doctorName = (profile.full_name || "").replace(/^Dr\.?\s*/i, "").trim();
+  const lastName = doctorName.split(/\s+/).filter(Boolean).at(-1) || doctorName;
+
+  return (
+    <LoadState loading={loading} error={error} onRetry={reload}>
+      {data && (() => {
+        const now = data.server_now;
+        const todayRows = data.today || [];
+        const upcomingRows = data.upcoming || [];
+        const appointments = tab === "today" ? todayRows : upcomingRows;
+        const stats = data.stats;
+        const breakdown = stats.today_breakdown;
+
+        return <>
+          <PageHeader
+            showLanguage
+            title={fill(t(`doctor.dashboard.${dayPart(Date.parse(now), tz)}`), { name: lastName })}
+            subtitle={fill(t("doctor.dashboard.subtitle"), { date: formatDay(now, lang, tz) })}
+          />
+
+          <div className="mb-6 grid gap-4 lg:grid-cols-3">
+            <StatCard value={stats.total_patients} label={t("doctor.dashboard.totalPatients")} />
+            <StatCard
+              value={stats.appointments_today}
+              label={t("doctor.dashboard.appointmentsToday")}
+              detail={fill(t("doctor.dashboard.breakdown"), {
+                a: breakdown.in_progress,
+                b: breakdown.waiting,
+                c: breakdown.later,
+              })}
+            />
+            <StatCard
+              value={stats.in_queue_now}
+              label={t("doctor.dashboard.inQueue")}
+              detail={stats.next_waiting
+                ? <bdi dir="ltr">{fill(t("doctor.dashboard.next"), {
+                    token: stats.next_waiting.token_no,
+                    patient: stats.next_waiting.patient_name,
+                  })}</bdi>
+                : t("doctor.dashboard.nobodyWaiting")}
+            />
+          </div>
+
+          <div className="mb-6 grid gap-5 lg:grid-cols-[2fr_1fr]">
+            <Card className="p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-2xl font-black">{t("doctor.dashboard.appointments")}</h2>
+                <Tabs
+                  variant="pill"
+                  tabs={[
+                    { id: "today", label: t("doctor.dashboard.today") },
+                    { id: "upcoming", label: t("doctor.dashboard.upcoming") },
+                  ]}
+                  active={tab}
+                  onChange={setTab}
+                />
+              </div>
+              {appointments.length ? (
+                <div>
+                  {appointments.map((appointment) => (
+                    <Link
+                      key={appointment.id}
+                      to={`/doctor/queue/${appointment.id}`}
+                      className="flex items-center gap-3 border-b border-line py-3 last:border-0"
+                    >
+                      <Avatar name={appointment.patient_name} />
+                      <span className="min-w-0 flex-1">
+                        <b className="block truncate">{appointment.patient_name}</b>
+                        <small className="block truncate text-ink-muted">
+                          <bdi dir="ltr">{tab === "today"
+                            ? formatTime(appointment.starts_at, tz)
+                            : formatShort(appointment.starts_at, lang, tz)}</bdi>
+                          {" · "}{appointment.reason || "—"}
+                        </small>
+                      </span>
+                      <AppointmentBadge appointment={appointment} />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-8 text-ink-muted">
+                  {t(tab === "today" ? "doctor.dashboard.noToday" : "doctor.dashboard.noUpcoming")}
+                </p>
+              )}
+            </Card>
+
+            <Card className="p-5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-xl font-black">{t("doctor.dashboard.availability")}</h2>
+                <Link to="/doctor/availability">
+                  <Button size="sm" variant="secondary" fullWidth={false}>{t("doctor.dashboard.edit")}</Button>
+                </Link>
+              </div>
+              <div>
+                {(data.schedule || []).map((day) => (
+                  <div key={day.weekday} className="flex items-center gap-2 border-b border-line py-2 last:border-0">
+                    <b className="w-10 shrink-0">{t(`doctor.days.short.${WEEKDAYS[day.weekday]}`)}</b>
+                    {day.is_active ? (
+                      <>
+                        <span className="min-w-0 flex-1"><bdi dir="ltr">{day.start_time} – {day.end_time}</bdi></span>
+                        <span className="shrink-0 text-sm text-ink-muted"><bdi dir="ltr">{day.slot_minutes} {t("doctor.dashboard.minutes")}</bdi></span>
+                      </>
+                    ) : <span className="text-ink-muted">{t("doctor.availability.off")}</span>}
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid gap-5 lg:grid-cols-2">
+            {[
+              {
+                title: "doctor.dashboard.recentTests",
+                rows: data.recent_tests || [],
+                empty: "doctor.dashboard.noTests",
+                to: "/doctor/lab-tests",
+                columns: [
+                  { header: t("doctor.dashboard.test"), render: (row) => row.test_name },
+                  { header: t("doctor.dashboard.patient"), render: (row) => row.patient_name },
+                  { header: t("doctor.dashboard.date"), render: (row) => <bdi dir="ltr">{shortDate(row.created_at, lang, tz)}</bdi> },
+                  { header: t("doctor.common.status"), render: (row) => <Status value={row.status} /> },
+                ],
+              },
+              {
+                title: "doctor.dashboard.recentRx",
+                rows: data.recent_prescriptions || [],
+                empty: "doctor.dashboard.noRx",
+                to: "/doctor/prescriptions",
+                columns: [
+                  { header: t("doctor.dashboard.rx"), render: (row) => <bdi dir="ltr"><b>{row.rx_no}</b></bdi> },
+                  { header: t("doctor.dashboard.patient"), render: (row) => row.patient_name },
+                  { header: t("doctor.dashboard.date"), render: (row) => <bdi dir="ltr">{shortDate(row.issued_on, lang, tz)}</bdi> },
+                  { header: t("doctor.common.status"), render: (row) => <Status value={row.status} /> },
+                ],
+              },
+            ].map((section) => (
+              <Card key={section.title} className="p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h2 className="text-xl font-black">{t(section.title)}</h2>
+                  <Link className="shrink-0 font-bold text-brand-700 underline" to={section.to}>{t("doctor.dashboard.viewAll")}</Link>
+                </div>
+                <DataTable dense columns={section.columns} rows={section.rows} emptyText={t(section.empty)} />
+              </Card>
+            ))}
+          </div>
+        </>;
+      })()}
+    </LoadState>
+  );
+}

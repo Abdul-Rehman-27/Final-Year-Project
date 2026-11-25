@@ -30,7 +30,7 @@ export function useRequest(loader, deps = []) {
 const statuses = {
   active: ["doctor.status.visit.active", "success"], ready: ["doctor.status.lab.ready", "success"],
   confirmed: ["doctor.status.appt.confirmed", "success"], waiting: ["doctor.status.visit.waiting", "success"],
-  in_progress: ["doctor.status.visit.in_progress", "success"], scheduled: ["doctor.status.appt.pending", "warning"],
+  in_progress: ["doctor.status.visit.in_progress", "success"], scheduled: ["doctor.status.lab.scheduled", "warning"],
   requested: ["doctor.status.lab.requested", "warning"], holding: ["doctor.status.visit.holding", "warning"],
   pending: ["doctor.status.appt.pending", "warning"], not_arrived: ["doctor.status.visit.not_arrived", "warning"],
   later: ["doctor.status.visit.later", "neutral"], completed: ["doctor.status.visit.completed", "neutral"],

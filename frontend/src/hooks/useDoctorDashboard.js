@@ -1,3 +1,32 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { doctorPortalService } from "../services/doctorPortalService.js";
-export default function useDoctorDashboard(){const [data,setData]=useState(null),[loading,setLoading]=useState(true),[error,setError]=useState(null);const refresh=useCallback(async()=>{setLoading(true);try{setData(await doctorPortalService.getDashboard());setError(null);}catch(e){setError(e);}finally{setLoading(false);}},[]);useEffect(()=>{let active=true;doctorPortalService.getDashboard().then(x=>active&&setData(x)).catch(e=>active&&setError(e)).finally(()=>active&&setLoading(false));return()=>{active=false};},[]);return {data,loading,error,refresh};}
+
+export default function useDoctorDashboard() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const mounted = useRef(false);
+
+  const reload = useCallback(async () => {
+    if (mounted.current) {
+      setLoading(true);
+      setError(null);
+    }
+    try {
+      const result = await doctorPortalService.getDashboard();
+      if (mounted.current) setData(result);
+    } catch (err) {
+      if (mounted.current) setError(err);
+    } finally {
+      if (mounted.current) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    void reload();
+    return () => { mounted.current = false; };
+  }, [reload]);
+
+  return { data, loading, error, reload, refresh: reload };
+}
