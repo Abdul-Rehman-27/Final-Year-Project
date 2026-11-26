@@ -9,7 +9,7 @@ const live = {
   getSummaryBase:(id,appointment_id)=>api.get(`/doctor/patients/${id}/summary-base`,{params:{appointment_id}}).then(r=>r.data).catch(wrap), createSummary:(id,appointment_id)=>api.post(`/doctor/patients/${id}/summary`,null,{params:{appointment_id}}).then(r=>r.data).catch(wrap),
   getSchedule:()=>api.get("/doctor/schedule").then(r=>r.data).catch(wrap), putSchedule:(days)=>api.put("/doctor/schedule",{days}).then(r=>r.data).catch(wrap), saveSchedule:(days)=>api.put("/doctor/schedule",{days}).then(r=>r.data).catch(wrap), getLabTests:()=>api.get("/doctor/lab-tests").then(r=>r.data).catch(wrap), listLabReports:(params={})=>api.get("/doctor/lab-reports",{params}).then(r=>r.data).catch(wrap), createLabReport:(body)=>api.post("/doctor/lab-reports",body).then(r=>r.data).catch(wrap), getLabReport:(id)=>api.get(`/doctor/lab-reports/${id}`).then(r=>r.data).catch(wrap), getLabFile:(id,file_id)=>api.get(`/doctor/lab-reports/${id}/files/${file_id}`,{responseType:"blob"}).then(r=>r.data).catch(wrap),
 };
-const mock = import.meta.env.VITE_DOCTOR_API_MODE === "mock";
+const mock = import.meta.env.VITE_DOCTOR_API_MODE !== "live";
 let mockApiPromise;
 let mockUserId;
 async function getMockApi(){
