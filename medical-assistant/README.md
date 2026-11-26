@@ -136,6 +136,22 @@ Integration requests require the matching API scope when `MEDICAL_ASSISTANT_API_
 
 ## Clinical summaries
 
+### Integrate the summarizer in any app
+
+Run `uvicorn app.summarizer_service:app --port 8012` and call the scoped endpoint with an `X-API-Key` when keys are configured. It accepts CityHospital data by patient ID:
+
+```bash
+curl -X POST http://localhost:8012/api/v1/summaries/by-patient -H 'Content-Type: application/json' -d '{"patient_id":"42","doctor_id":"7"}'
+```
+
+Or provide records without sharing a database:
+
+```bash
+curl -X POST http://localhost:8012/api/v1/summaries/by-patient -H 'Content-Type: application/json' -d '{"patient_id":"external-42","documents":[{"name":"record.txt","content_type":"text/plain","content_base64":"..."}]}'
+```
+
+Both return `id`, cache and source metadata, plus `fields` with: `patient_overview`, `chief_complaint`, `medical_history`, `surgical_history`, `medications`, `allergies`, `family_history`, `social_history`, `vitals_and_results`, and `assessment_and_plan`.
+
 The summarizer accepts text-based PDFs and UTF-8 text, CSV, or JSON files up to 15 MB. Image-only PDFs need OCR before upload. The backend asks the model to use only facts stated in the source and returns these ten fields:
 
 1. Patient overview

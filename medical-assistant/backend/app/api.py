@@ -16,6 +16,8 @@ from app import db
 from app.core import settings
 from app.llm import chat, connectivity
 from app.security import require_scope
+from app.summarizer.pipeline import markdown_hash, summarize_records
+from app.summarizer.sources import CityHospitalSource
 
 router = APIRouter(prefix="/api/v1")
 logger = logging.getLogger(__name__)
@@ -505,36 +507,61 @@ def upsert_doctor(payload: DoctorRecord):
     return {"id": payload.id, "status": "stored"}
 
 
+class SummaryDocument(BaseModel):
+    name: str
+    content_type: str = "text/plain"
+    content_base64: str
+
+
+class PatientSummaryRequest(BaseModel):
+    patient_id: str
+    doctor_id: str | None = None
+    appointment_id: str | None = None
+    documents: list[SummaryDocument] | None = None
+    force: bool = False
+
+
+async def _summary_response(patient_id, records, force=False, source_name="patient records"):
+    from app.summarizer.markdown import records_to_markdown
+    markdown, sources, warnings = records_to_markdown(records)
+    digest = markdown_hash(markdown)
+    if not force:
+        with db.connect() as conn:
+            old = conn.execute("SELECT * FROM summaries WHERE patient_id=? AND source_hash=? ORDER BY created_at DESC LIMIT 1", (patient_id, digest)).fetchone()
+        if old:
+            metadata = db.json_value(old["metadata"], {})
+            return {"id": old["id"], "patient_id": patient_id, "fields": db.json_value(old["fields"], {}), "sources": metadata.get("sources", sources), "warnings": metadata.get("warnings", warnings), "truncated": metadata.get("truncated", False), "cached": True, "generated_at": old["created_at"], "provider": metadata.get("provider"), "model": metadata.get("model"), "usage": metadata.get("usage", {})}
+    try:
+        result = await summarize_records(records)
+    except Exception as exc:
+        logger.info("summary failed patient_id=%s size=%s", patient_id, len(markdown))
+        raise HTTPException(503, "Could not create a validated summary. Check model connectivity and try again.") from exc
+    summary_id = str(uuid.uuid4())
+    metadata = {key: result[key] for key in ("sources", "warnings", "truncated", "provider", "model", "usage")}
+    with db.connect() as conn:
+        conn.execute("INSERT INTO summaries(id, patient_id, fields, source_name, source_hash, metadata) VALUES (?, ?, ?, ?, ?, ?)", (summary_id, patient_id, json.dumps(result["fields"]), source_name, digest, json.dumps(metadata)))
+    return {"id": summary_id, "patient_id": patient_id, **metadata, "cached": False, "generated_at": result["generated_at"], "fields": result["fields"]}
+
+
+@router.post("/summaries/by-patient", dependencies=[Depends(require_scope("summarizer:write"))])
+async def summarize_by_patient(payload: PatientSummaryRequest):
+    records = {"patient": {}, "appointments": [], "prescriptions": [], "reports": [], "files": [], "patient_records": [], "documents": [item.model_dump() for item in payload.documents or []]}
+    if settings.RECORD_SOURCE == "cityhospital":
+        records.update(CityHospitalSource().records(payload.patient_id, payload.doctor_id, payload.appointment_id))
+        records["documents"] = [item.model_dump() for item in payload.documents or []]
+    return await _summary_response(payload.patient_id, records, payload.force)
+
+
 @router.post("/summaries", dependencies=[Depends(require_scope("summarizer:write"))])
 async def summarize(patient_id: str = Form(default=""), file: UploadFile = File(...)):
     content = await file.read(settings.MAX_UPLOAD_MB * 1024 * 1024 + 1)
     if len(content) > settings.MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(413, f"File exceeds {settings.MAX_UPLOAD_MB} MB limit.")
+    import base64
     name = file.filename or "uploaded-record"
-    try:
-        if name.lower().endswith(".pdf"):
-            import io
-            source = "\n".join(page.extract_text() or "" for page in PdfReader(io.BytesIO(content)).pages)
-        else:
-            source = content.decode("utf-8")
-    except Exception as exc:
-        raise HTTPException(422, "The file could not be read. Use a text-based PDF or UTF-8 text file.") from exc
-    if not source.strip():
-        raise HTTPException(422, "No readable text was found in the uploaded file.")
-    instruction = "Summarize only facts explicitly present in the source. Never infer missing facts. Return only a JSON object with exactly these ten string fields: " + ", ".join(SUMMARY_FIELDS) + ". For any field without documented information, use 'Not documented in the provided records'. Keep clinically relevant dates and units."
-    try:
-        result = await chat([{"role": "system", "content": instruction}, {"role": "user", "content": f"Source document ({name}):\n{source[:60000]}"}], max_tokens=1500, json_mode=True)
-        raw = result["text"].strip().removeprefix("```json").removesuffix("```").strip()
-        fields = json.loads(raw)
-        if not isinstance(fields, dict):
-            raise ValueError("Summary must be a JSON object.")
-        fields = {key: str(fields.get(key, "Not documented in the provided records")) for key in SUMMARY_FIELDS}
-    except Exception as exc:
-        raise HTTPException(503, "Could not create a validated summary. Check model connectivity and try again.") from exc
-    summary_id = str(uuid.uuid4())
-    with db.connect() as conn:
-        conn.execute("INSERT INTO summaries(id, patient_id, fields, source_name) VALUES (?, ?, ?, ?)", (summary_id, patient_id, json.dumps(fields), name))
-    return {"id": summary_id, "patient_id": patient_id, "source_name": name, "fields": fields, "usage": result.get("usage", {}), "provider": result.get("provider"), "model": result.get("model")}
+    result = await _summary_response(patient_id, {"documents": [{"name": name, "content_type": file.content_type or "application/octet-stream", "content_base64": base64.b64encode(content).decode()}]}, source_name=name)
+    result["source_name"] = name
+    return result
 
 
 @router.get("/summaries/{summary_id}", dependencies=[Depends(require_scope("summarizer:read"))])

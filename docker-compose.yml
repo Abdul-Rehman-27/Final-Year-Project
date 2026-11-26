@@ -39,6 +39,31 @@ services:
       retries: 5
       start_period: 20s
 
+  summarizer-api:
+    image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-medical-assistant-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ./medical-assistant/backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+      - ./medical-assistant/.env
+    environment:
+      MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+      SUMMARIZER_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
+    command: uvicorn app.summarizer_service:app --host 0.0.0.0 --port 8012
+    ports:
+      - "8012:8012"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8012/api/v1/health', timeout=12)"]
+      interval: 20s
+      timeout: 15s
+      retries: 5
+      start_period: 20s
+
   medical-assistant-frontend:
     image: ${DOCKERHUB_USERNAME:-local}/${DOCKERHUB_REPOSITORY:-cityhospital}-medical-assistant-frontend:${IMAGE_TAG:-latest}
     build:
@@ -69,7 +94,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
-      MEDICAL_ASSISTANT_URL: http://medical-assistant-backend:8010
+      MEDICAL_ASSISTANT_URL: http://summarizer-api:8012
       MEDICAL_ASSISTANT_DATABASE_URL: postgresql+psycopg2://cityhospital:cityhospital@db:5432/cityhospital
     command: sh -c "python -m scripts.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     ports:
@@ -78,6 +103,8 @@ services:
       db:
         condition: service_healthy
       medical-assistant-backend:
+        condition: service_healthy
+      summarizer-api:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]

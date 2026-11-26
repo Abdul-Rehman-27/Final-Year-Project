@@ -228,21 +228,28 @@ function ChatView({ patientId }) {
 
 function SummaryView() {
   const [file, setFile] = useState(null);
-  const [patientRef, setPatientRef] = useState("");
+  const [patientRef, setPatientRef] = useState(() => new URLSearchParams(window.location.search).get("patient_id") || "");
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
+  const embedded = new URLSearchParams(window.location.search).get("embed") === "cityhospital";
+
+  useEffect(() => {
+    if (!embedded) return undefined;
+    const receive = (event) => { if (event.data?.type === "cityhospital-session" && event.data.patientId) setPatientRef(String(event.data.patientId)); };
+    window.addEventListener("message", receive);
+    return () => window.removeEventListener("message", receive);
+  }, [embedded]);
 
   const submit = async (event) => {
     event.preventDefault();
-    if (!file) return;
-    const form = new FormData();
-    form.append("file", file);
-    form.append("patient_id", patientRef.trim());
+    if (!patientRef.trim()) return;
+    let documents = null;
+    if (file) documents = [{ name: file.name, content_type: file.type || "application/octet-stream", content_base64: await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(",")[1]); reader.onerror = reject; reader.readAsDataURL(file); }) }];
     setLoading(true);
     setStatus("Reading record and preparing a grounded summary…");
     try {
-      const result = await api("/api/v1/summaries", { method: "POST", body: form });
+      const result = await api("/api/v1/summaries/by-patient", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ patient_id: patientRef.trim(), documents }) });
       setSummary(result);
       setStatus(result.usage?.total_tokens ? `Summary ready · ${result.usage.total_tokens} tokens used` : "Summary ready · model token usage not reported");
     } catch (reason) {
@@ -250,25 +257,19 @@ function SummaryView() {
     } finally { setLoading(false); }
   };
 
+  const field = (key) => summary?.fields?.[key] || "Not documented in the provided records";
+  const allergiesMissing = field("allergies").startsWith("Not documented");
+  const generated = summary?.generated_at ? new Date(typeof summary.generated_at === "number" ? summary.generated_at * 1000 : summary.generated_at).toLocaleString() : "—";
+  const appointments = (summary?.sources || []).filter((source) => /appointment/i.test(source)).join(" · ") || "No past appointments documented";
+  const card = (title, content, warning = false) => <article className={`rounded-2xl border p-5 ${warning ? "border-amber-300 bg-amber-50" : "border-line bg-white"}`}><h3 className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">{title}</h3><div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{content}</div></article>;
+
   return (
     <>
-      <div className="mb-5 flex items-center gap-3"><Glyph className="h-11 w-11 rounded-xl bg-brand-tint text-xl text-brand-700">▤</Glyph><div><h2 className="text-lg font-bold">Clinical history summary</h2><p className="mt-1 text-xs text-ink-muted">For clinician use. Create a structured summary from patient records.</p></div></div>
-      <div className="grid max-w-6xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
-        <section className="rounded-2xl border border-line bg-white p-5">
-          <Glyph className="h-10 w-10 rounded-xl bg-brand-tint text-xl text-brand-700">↑</Glyph><h3 className="mt-3 text-sm font-bold">Add patient records</h3><p className="mt-1 text-[11px] leading-5 text-ink-muted">Upload a text-based PDF or UTF-8 text/CSV/JSON record. Scanned images need OCR before summarization.</p>
-          <form onSubmit={submit}>
-            <label htmlFor="patient-ref" className="mb-1 mt-4 block text-[10px] font-bold">Patient reference <span className="font-normal text-slate-400">Optional</span></label>
-            <input id="patient-ref" value={patientRef} onChange={(event) => setPatientRef(event.target.value)} maxLength={128} placeholder="e.g. patient-1024" className="w-full rounded-lg border border-line px-3 py-2.5 text-xs outline-none focus:border-brand-600" />
-            <label htmlFor="record-file" className="mt-4 flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#9cbcb5] bg-[#f8fbfa] px-4 text-center hover:bg-brand-50"><span className="text-xl text-brand-700">▤</span><b className="text-[10px] text-[#44615c]">{file?.name || "Choose a PDF, TXT, CSV, or JSON file"}</b><small className="text-[9px] text-slate-400">Maximum file size 15 MB</small><input id="record-file" type="file" accept=".pdf,.txt,.json,.csv" required onChange={(event) => setFile(event.target.files?.[0] || null)} className="sr-only" /></label>
-            <button type="submit" disabled={loading || !file} className="mt-4 w-full rounded-lg bg-brand-700 px-4 py-3 text-xs font-semibold text-white hover:bg-brand-800 disabled:cursor-wait disabled:opacity-60">{loading ? "Preparing summary…" : "Create clinical summary"}</button>
-          </form>
-          {status && <p role="status" className={`mt-3 text-[10px] leading-4 ${summary ? "text-brand-700" : "text-red-700"}`}>{status}</p>}
-        </section>
-        <section className="min-h-[450px] rounded-2xl border border-line bg-white p-5">
-          {!summary ? <div className="flex min-h-[405px] flex-col items-center justify-center text-center text-ink-muted"><Glyph className="h-14 w-14 rounded-2xl bg-surface text-2xl text-[#74a49c]">▦</Glyph><h3 className="mt-3 text-sm font-bold text-ink">Your summary will appear here</h3><p className="mt-1 max-w-xs text-[10px] leading-4">Ten clearly labeled fields will be shown after a record is processed.</p></div> : <><div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="text-sm font-bold">Structured patient history</h3><span className="text-[9px] text-ink-muted">{summary.source_name} · {summary.provider} · {summary.model}</span></div><div className="grid gap-2.5 sm:grid-cols-2">{SUMMARY_FIELDS.map(([key, label]) => <article key={key} className="rounded-xl border border-[#e5eeeb] p-3"><h4 className="text-[10px] font-bold text-brand-800">{label}</h4><p className="mt-2 whitespace-pre-wrap break-words text-[10px] leading-5 text-[#435a56]">{summary.fields[key] || "Not documented in the provided records"}</p></article>)}</div></>}
-        </section>
-      </div>
-      <p className="mt-4 text-[9px] text-slate-500">Clinical summaries support review and do not replace clinician judgment. Verify important details against the source record.</p>
+      <style>{"@media print { .summary-controls, .app-nav { display:none!important } body { background:white!important } }"}</style>
+      <header className="mb-5"><h2 className="text-3xl font-black text-ink">Medical history summary</h2><p className="mt-1 text-base text-ink-muted">{field("patient_overview")}</p></header>
+      <form onSubmit={submit} className="summary-controls mb-5 flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-4"><input value={patientRef} onChange={(event) => setPatientRef(event.target.value)} placeholder="Patient ID" className="rounded-lg border border-line px-3 py-2 text-sm" /><input type="file" accept=".pdf,.txt,.json,.csv,image/*" onChange={(event) => setFile(event.target.files?.[0] || null)} className="text-xs" /><button disabled={loading} className="rounded-lg bg-brand-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-60">{loading ? "Generating…" : "Generate summary"}</button></form>
+      {status && <p role="status" className={`mb-3 text-xs ${summary ? "text-brand-700" : "text-red-700"}`}>{status}</p>}
+      {!summary ? <section className="flex min-h-72 items-center justify-center rounded-2xl border border-line bg-white text-sm text-ink-muted">Enter a patient ID to generate a clinician-review summary.</section> : <><div className="mb-5 rounded-xl border border-dashed border-brand-600 bg-brand-50 px-5 py-4 font-semibold text-brand-800">Auto-generated from the patient&apos;s record on {generated}. For clinician review. Please verify against the original records.</div>{summary.warnings?.length > 0 && <div className="mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900">{summary.warnings.join(" · ")}</div>}<div className="grid gap-5 lg:grid-cols-3">{card("Patient snapshot", field("patient_overview"))}{card("Current complaint", field("chief_complaint"))}{card("Allergies", allergiesMissing ? <><b>Not recorded</b><br />Ask the patient and add to the record.</> : field("allergies"), allergiesMissing)}{card("Current medicines", field("medications"))}{card("Recent results", field("vitals_and_results"))}{card("Past appointments", appointments)}</div><details className="mt-5 rounded-2xl border border-line bg-white p-5"><summary className="cursor-pointer font-bold text-brand-800">More history</summary><div className="mt-4 grid gap-3 sm:grid-cols-2">{SUMMARY_FIELDS.filter(([key]) => !["patient_overview", "chief_complaint", "allergies", "medications", "vitals_and_results"].includes(key)).map(([key, label]) => card(label, field(key)))}</div></details><div className="summary-controls mt-5 flex justify-between"><div>{embedded && <><button onClick={() => window.parent.postMessage({ type: "medical-assistant-back" }, "*")} className="rounded-lg border border-line px-4 py-3 text-sm font-bold">← Back</button><button onClick={() => window.parent.postMessage({ type: "medical-assistant-write-prescription", patientId: patientRef }, "*")} className="ml-2 rounded-lg bg-brand-700 px-4 py-3 text-sm font-bold text-white">Write prescription</button></>}</div><button onClick={() => window.print()} className="rounded-lg border border-line bg-white px-4 py-3 text-sm font-bold">Print summary</button></div></>}
     </>
   );
 }

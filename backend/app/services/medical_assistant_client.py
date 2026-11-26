@@ -42,3 +42,16 @@ async def summarize_text(patient_id: str, filename: str, text: str) -> dict:
             return fields
     except Exception as exc:
         raise MedicalAssistantError("summary unavailable") from exc
+
+
+async def summarize_patient(patient_id: str, doctor_id: str, appointment_id: str | None = None) -> dict:
+    """Use the independent records-to-Markdown summarizer without exposing PHI in logs."""
+    try:
+        result = await request("POST", "/api/v1/summaries/by-patient", json={
+            "patient_id": str(patient_id), "doctor_id": str(doctor_id),
+            "appointment_id": str(appointment_id) if appointment_id is not None else None,
+        }, timeout=120)
+        if not isinstance(result.get("fields"), dict): raise ValueError("invalid fields")
+        return result
+    except Exception as exc:
+        raise MedicalAssistantError("summary unavailable") from exc

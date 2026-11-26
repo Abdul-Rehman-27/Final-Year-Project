@@ -66,7 +66,9 @@ def _initialize_postgres():
         "CREATE INDEX IF NOT EXISTS idx_records_patient ON patient_records(patient_id, category)",
         "CREATE TABLE IF NOT EXISTS doctors (id TEXT PRIMARY KEY, name TEXT NOT NULL, specialty TEXT NOT NULL, hospital TEXT NOT NULL, availability TEXT NOT NULL DEFAULT '[]')",
         "CREATE TABLE IF NOT EXISTS appointments (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, doctor_id TEXT NOT NULL, slot TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'booked', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(doctor_id, slot))",
-        "CREATE TABLE IF NOT EXISTS summaries (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL DEFAULT '', fields TEXT NOT NULL, source_name TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "CREATE TABLE IF NOT EXISTS summaries (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL DEFAULT '', fields TEXT NOT NULL, source_name TEXT NOT NULL, source_hash TEXT, metadata TEXT NOT NULL DEFAULT '{}', created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        "ALTER TABLE summaries ADD COLUMN IF NOT EXISTS source_hash TEXT",
+        "ALTER TABLE summaries ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}'",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS structured TEXT",
     ]
     with connect() as connection:
@@ -90,13 +92,16 @@ def initialize():
         CREATE INDEX IF NOT EXISTS idx_records_patient ON patient_records(patient_id, category);
         CREATE TABLE IF NOT EXISTS doctors (id TEXT PRIMARY KEY, name TEXT NOT NULL, specialty TEXT NOT NULL, hospital TEXT NOT NULL, availability TEXT NOT NULL DEFAULT '[]');
         CREATE TABLE IF NOT EXISTS appointments (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL, doctor_id TEXT NOT NULL, slot TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'booked', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(doctor_id, slot));
-        CREATE TABLE IF NOT EXISTS summaries (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL DEFAULT '', fields TEXT NOT NULL, source_name TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS summaries (id TEXT PRIMARY KEY, patient_id TEXT NOT NULL DEFAULT '', fields TEXT NOT NULL, source_name TEXT NOT NULL, source_hash TEXT, metadata TEXT NOT NULL DEFAULT '{}', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
         """)
         # Older SQLite databases do not have this column yet, so add it once.
         try:
             db.execute("ALTER TABLE messages ADD COLUMN structured TEXT")
         except sqlite3.OperationalError:
             pass
+        for statement in ("ALTER TABLE summaries ADD COLUMN source_hash TEXT", "ALTER TABLE summaries ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'"):
+            try: db.execute(statement)
+            except sqlite3.OperationalError: pass
 
 
 def row_dict(row):

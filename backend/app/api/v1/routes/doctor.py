@@ -249,24 +249,13 @@ def get_file(report_id:int,file_id:int,db:Session=Depends(get_db),user:User=Depe
     return Response(content=f.data,media_type=f.content_type)
 
 SUMMARY_KEYS=("patient_overview","chief_complaint","medical_history","surgical_history","medications","allergies","family_history","social_history","vitals_and_results","assessment_and_plan")
-def summary_source(db,doctor_id,patient_id,appointment_id=None):
-    p=patient(db,patient_id); lines=[f"Patient: {p.full_name}",f"Age: {age_on(p.date_of_birth)}",f"Gender: {p.gender or 'Not documented'}"]
-    ap=db.scalars(select(PortalAppointment).where(PortalAppointment.doctor_id==doctor_id,PortalAppointment.patient_id==patient_id).order_by(PortalAppointment.starts_at.desc())).all()
-    if appointment_id:
-        target=next((x for x in ap if x.id==appointment_id),None)
-        if not target:fail(404,"NOT_FOUND")
-        lines.append(f"Chief complaint: {target.reason or 'Not documented'}")
-    lines += [f"Appointment: {local_day(x.starts_at)} — {x.status}" for x in ap]
-    for r in db.scalars(select(PortalPrescription).where(PortalPrescription.doctor_id==doctor_id,PortalPrescription.patient_id==patient_id)).all():
-        for i in db.scalars(select(PortalPrescriptionItem).where(PortalPrescriptionItem.prescription_id==r.id)).all():lines.append(f"Medication: {i.medicine} · {i.dosage} · {i.timing} · {effective_rx(r)}")
-    for r in db.scalars(select(PortalLabReport).where(PortalLabReport.requested_by_doctor_id==doctor_id,PortalLabReport.patient_id==patient_id,PortalLabReport.status=="ready")).all():lines += [f"Report {r.test_name}: {r.findings}",f"Impression: {r.impression}"]
-    return "\n".join(lines)
 @router.post("/patients/{patient_id}/summary")
 async def summary(patient_id:int,appointment_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
-    import hashlib
+    from app.services.medical_assistant_client import summarize_patient
     if not related(db,user.id,patient_id):fail(404,"NOT_FOUND")
-    source=summary_source(db,user.id,patient_id,appointment_id);digest=hashlib.sha256(source.encode()).hexdigest();old=db.scalar(select(PortalClinicalSummary).where(PortalClinicalSummary.doctor_id==user.id,PortalClinicalSummary.patient_id==patient_id,PortalClinicalSummary.appointment_id==appointment_id,PortalClinicalSummary.source_hash==digest))
-    if old:return {"id":old.id,"created_at":iso(old.created_at),"cached":True,"fields":old.fields}
-    try:raw=await summarize_text(str(patient_id),"doctor-portal-record.txt",source)
+    if appointment_id is not None and not db.scalar(select(PortalAppointment).where(PortalAppointment.id==appointment_id,PortalAppointment.doctor_id==user.id,PortalAppointment.patient_id==patient_id)):fail(404,"NOT_FOUND")
+    try:remote=await summarize_patient(str(patient_id),str(user.id),str(appointment_id) if appointment_id is not None else None)
     except MedicalAssistantError:fail(503,"SUMMARY_UNAVAILABLE")
-    fields={k:(raw.get(k) or "Not documented in the provided records") for k in SUMMARY_KEYS}; row=PortalClinicalSummary(doctor_id=user.id,patient_id=patient_id,appointment_id=appointment_id,source_hash=digest,fields=fields);db.add(row);db.commit();return {"id":row.id,"created_at":iso(row.created_at),"cached":False,"fields":fields}
+    digest=str(remote["id"]);old=db.scalar(select(PortalClinicalSummary).where(PortalClinicalSummary.doctor_id==user.id,PortalClinicalSummary.patient_id==patient_id,PortalClinicalSummary.appointment_id==appointment_id,PortalClinicalSummary.source_hash==digest))
+    if old:return {"id":old.id,"created_at":iso(old.created_at),"cached":True,"fields":old.fields}
+    fields={k:(remote["fields"].get(k) or "Not documented in the provided records") for k in SUMMARY_KEYS}; row=PortalClinicalSummary(doctor_id=user.id,patient_id=patient_id,appointment_id=appointment_id,source_hash=digest,fields=fields);db.add(row);db.commit();return {"id":row.id,"created_at":iso(row.created_at),"cached":False,"fields":fields}
