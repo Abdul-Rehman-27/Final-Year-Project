@@ -463,5 +463,11 @@ export default {
       },
     },
   },
+  doctor: {
+    common: { selectPatient: "مریض منتخب کریں", selectTest: "ٹیسٹ منتخب کریں", cancel: "منسوخ کریں", loadMore: "مزید دیکھیں", pageUnavailable: "یہ صفحہ دستیاب نہیں ہے۔", back: "واپس" },
+    appointment: { yearsShort: "سال" }, status: { lab: { requested: "درخواست کردہ", scheduled: "طے شدہ", in_progress: "جاری", ready: "تیار", cancelled: "منسوخ" } }, tryAgain: "دوبارہ کوشش کریں",
+    errors: { NOT_FOUND: "یہ صفحہ دستیاب نہیں ہے۔", ALREADY_CHECKED_IN: "مریض پہلے ہی چیک اِن ہو چکا ہے۔", NOT_TODAY: "یہ اپائنٹمنٹ آج کے لیے مقرر نہیں ہے۔", NOT_CHECKED_IN: "پہلے مریض کا چیک اِن ضروری ہے۔", INVALID_TRANSITION: "اس وزٹ کی حیثیت تبدیل نہیں کی جا سکتی۔", ALREADY_IN_PROGRESS: "پہلے موجودہ مریض کا معائنہ مکمل کریں۔", QUEUE_HELD: "اس سے پہلے آنے والے مریض کی جگہ محفوظ ہے۔", NOT_NEXT: "قطار میں اگلا مریض کوئی اور ہے۔", VISIT_NOT_IN_PROGRESS: "نسخہ صرف جاری اپائنٹمنٹ کے دوران لکھا جا سکتا ہے۔", SCHEDULE_INVALID: "براہ کرم ہفتہ وار شیڈول کی معلومات درست کریں۔", SUMMARY_UNAVAILABLE: "طبی خلاصہ تیار نہیں ہو سکا۔ کچھ دیر بعد دوبارہ کوشش کریں۔", VALIDATION_ERROR: "براہ کرم درج کردہ معلومات درست کریں۔", NETWORK: "نیٹ ورک سے رابطہ نہیں ہو سکا۔", GENERIC: "درخواست مکمل نہیں ہو سکی۔" },
+    lab: { title: "لیب ٹیسٹ", subtitle: "آپ کے درخواست کردہ ٹیسٹ اور ان کے نتائج", request: "ٹیسٹ کی درخواست", requested: "درخواست کردہ ٹیسٹ", patient: "مریض", test: "ٹیسٹ", requestedDate: "درخواست کی تاریخ", status: "حیثیت", prep: "تیاری: {note}", notes: "نوٹس (اختیاری)", notesLabel: "نوٹس", send: "درخواست بھیجیں", noReports: "کوئی لیب رپورٹ نہیں ملی۔", detail: "لیب رپورٹ", results: "نتائج", result: "نتیجہ", reference: "معیاری حد", finding: "مشاہدات", impression: "تاثر", comments: "تبصرے", flag: "اشارہ", view: "دیکھیں", success: "{name} کے لیے ٹیسٹ کی درخواست بھیج دی گئی۔", linked: "اپائنٹمنٹ {token} سے منسلک", formHelp: "فہرست سے مریض اور ٹیسٹ منتخب کریں۔", tabs: { all: "تمام", requested: "درخواست کردہ", scheduled: "طے شدہ", ready: "تیار" }, flags: { normal: "معمول کے مطابق", high: "زیادہ", low: "کم" } },
+  },
   notFound: { title: "صفحہ نہیں ملا", back: "لاگ اِن پر جائیں" },
 };
