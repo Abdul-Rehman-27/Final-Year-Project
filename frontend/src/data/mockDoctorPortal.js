@@ -43,7 +43,11 @@ function appointmentDetail(id){
  return {id:a.id,booking_no:a.booking_no,token_no:a.token_no??null,starts_at:a.starts_at,checked_in_at:a.checked_in_at??null,called_at:a.called_at??null,completed_at:a.completed_at??null,status:a.status,visit_status:a.visit_status,queue_state:entry?.queue_state||"none",reason:a.reason??null,source:a.source||"portal",room_label:a.room_label||"",can_call:entry?.can_call??false,patient:{id:patient.id,full_name:patient.full_name,age:patient.age??null,gender:patient.gender??null},prescriptions:rx.filter(item=>String(item.appointment_id)===String(a.id)).map(item=>({id:item.id,rx_no:item.rx_no,patient_id:item.patient_id,patient_name:item.patient_name,issued_on:item.issued_on,duration_days:item.duration_days,status:effectivePrescriptionStatus(item)})),lab_reports:reports.filter(item=>String(item.appointment_id)===String(a.id)).map(({id,report_no,test_name,kind,patient_id,patient_name,status,created_at,scheduled_for})=>({id,report_no,test_name,kind,patient_id,patient_name,status,created_at,scheduled_for}))};
 }
 function hasDoctorRelationship(patientId){return appts.some(a=>String(a.patient_id)===String(patientId)&&["confirmed","completed"].includes(a.status));}
-const otherDoctorAppointments=[{id:91,patient_id:1,starts_at:iso(-60*1440),doctor_name:"Dr. Farah Qureshi",department:"Family Medicine",status:"completed",visit_status:"completed",token_no:null,booking_no:"APT-HIST-91"}];
+const otherDoctorAppointments=[
+ {id:91,patient_id:1,starts_at:iso(-60*1440),doctor_name:"Dr. Farah Qureshi",department:"Family Medicine",status:"completed",visit_status:"completed",token_no:null,booking_no:"APT-HIST-91"},
+ {id:92,patient_id:1,starts_at:iso(-24*1440),doctor_name:"Dr. Omar Sheikh",department:"Orthopedics",status:"cancelled",visit_status:"scheduled",token_no:null,booking_no:"APT-HIST-92"},
+ {id:93,patient_id:1,starts_at:iso(-12*1440),doctor_name:"Dr. Hina Raza",department:"Dermatology",status:"confirmed",visit_status:"incomplete",token_no:"H-03",booking_no:"APT-HIST-93"},
+];
 function patientProfile(id){
  const p=people.find(x=>String(x.id)===String(id));
  if(!p||!hasDoctorRelationship(p.id))error("NOT_FOUND",404);

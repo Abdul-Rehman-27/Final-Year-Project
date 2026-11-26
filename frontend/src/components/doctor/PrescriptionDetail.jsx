@@ -16,7 +16,7 @@ function ageSex(patient, t) {
   return `${age} · ${gender}`;
 }
 
-export default function PrescriptionDetail({ detail, onPrint, showActions = true }) {
+export default function PrescriptionDetail({ detail, onPrint, showActions = true, durationText }) {
   const { t, lang } = useLanguage();
   const { hospital } = useDoctorContext();
   const appointment = detail.appointment;
@@ -53,7 +53,7 @@ export default function PrescriptionDetail({ detail, onPrint, showActions = true
         <InfoGrid cols={4} items={[
           { label: t("doctor.prescriptions.name"), value: patient.name || detail.patient_name || "—" },
           { label: t("doctor.prescriptions.ageSex"), value: ageSex(patient, t) },
-          { label: t("doctor.prescriptions.duration"), value: `${detail.duration_days} days`, dir: "ltr" },
+          { label: t("doctor.prescriptions.duration"), value: durationText || `${detail.duration_days} days`, dir: "ltr" },
           { label: t("doctor.prescriptions.status"), value: <Status value={detail.status} /> },
         ]} />
       </section>
