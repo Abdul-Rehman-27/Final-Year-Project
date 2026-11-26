@@ -5,6 +5,7 @@ export default {
     extend: {
       colors: {
         brand: {
+          deep: "#0B5F58",
           50: "#F0FDFA",
           100: "#CCFBF1",
           tint: "#DDEFEA", // soft mint used for active menu item and badges
@@ -14,12 +15,15 @@ export default {
           800: "#115E59",
         },
         surface: "#F4F8F7",
-        ink: { DEFAULT: "#0F2A27", muted: "#55706C" },
+        ink: { DEFAULT: "#0F2A27", muted: "#55706C", soft: "#4A6560" },
         line: "#D7E3E0",
+        divider: "#E5EEEC",
+        field: "#C3D3CF",
       },
       fontFamily: {
         sans: ["Lato", "system-ui", "sans-serif"],
         urdu: ["'Noto Nastaliq Urdu'", "serif"],
+        portal: ["'DM Sans'", "system-ui", "sans-serif"],
       },
     },
   },

@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { authService } from "../services/authService.js";
 import { clearSession, loadSession, saveSession } from "../services/session.js";
 
@@ -6,6 +6,11 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(loadSession);
+
+  // Keep the current authenticated tab available to protected printable views opened in a new tab.
+  useEffect(() => {
+    if (session.token && session.user) saveSession({ access_token: session.token, user: session.user });
+  }, [session]);
 
   const applySession = useCallback((data) => {
     saveSession(data);

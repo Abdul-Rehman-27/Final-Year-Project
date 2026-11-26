@@ -18,3 +18,4 @@ medical-chat-*.txt
 *.db
 __pycache__/
 node_modules/
+*.zip
