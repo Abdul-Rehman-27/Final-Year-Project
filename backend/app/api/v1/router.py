@@ -8,3 +8,5 @@ api_router.include_router(chatbot.router)
 api_router.include_router(chatbot_admin.router)
 api_router.include_router(evaluation.router)
 api_router.include_router(admin_module.router)
+from app.api.v1.routes import doctor
+api_router.include_router(doctor.router)

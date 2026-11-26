@@ -15,6 +15,7 @@ from app.db.migrations.v001_chatbot_admin import upgrade as migrate_chatbot_admi
 from app.db.migrations.v002_role_scoped_user_email import upgrade as migrate_role_scoped_user_email
 from app.db.migrations.v003_evaluation_progress import upgrade as migrate_evaluation_progress
 from app.db.migrations.v004_admin_module import upgrade as migrate_admin_module
+from app.db.migrations.v005_doctor_portal import upgrade as migrate_doctor_portal
 from app.models.user import User
 from app.core.security import decode_access_token
 from app.services.admin_health import monitor_services
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI):
     migrate_chatbot_admin(engine)
     migrate_evaluation_progress(engine)
     migrate_admin_module(engine)
+    migrate_doctor_portal(engine)
     health_task = asyncio.create_task(monitor_services())
     yield
     health_task.cancel()

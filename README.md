@@ -165,3 +165,6 @@ The portal defaults to in-memory demo data (`VITE_DOCTOR_API_MODE=mock` in `fron
 | Prescriptions | `/doctor/prescriptions` |
 | Patients | `/doctor/patients` |
 | Lab tests | `/doctor/lab-tests` |
+## Doctor portal backend
+
+The FastAPI doctor portal API is served beneath `/api/v1/doctor`. Run `python -m scripts.seed_doctor_demo` from `backend/` after the standard seed to create local doctor demonstration data.

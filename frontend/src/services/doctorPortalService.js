@@ -20,7 +20,7 @@ async function getMockApi(){
   }
   return mockApiPromise;
 }
-const methods=["getProfile","getHospitalInfo","getDashboard","getSchedule","putSchedule","saveSchedule","getQueue","getAppointment","getSummaryBase","createSummary","checkIn","setVisitStatus","listPrescriptions","getPrescription","createPrescription"];
+const methods=["getProfile","getHospitalInfo","getDashboard","getSchedule","putSchedule","saveSchedule","getQueue","getAppointment","getSummaryBase","createSummary","checkIn","setVisitStatus","listPrescriptions","getPrescription","createPrescription","listPatients","getPatientOptions","getPatient","getLabTests","listLabReports","createLabReport","getLabReport","getLabFile"];
 export const doctorPortalService=mock
   ? Object.fromEntries(methods.map(name=>[name,(...args)=>getMockApi().then(service=>service[name](...args))]))
   : Object.fromEntries(methods.map(name=>[name,live[name]]));
