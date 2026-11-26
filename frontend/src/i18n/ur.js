@@ -464,6 +464,8 @@ export default {
     },
   },
   doctor: {
+    gender: { maleShort: "م", femaleShort: "ع", otherShort: "دیگر" },
+    patients: { title: "مریض", subtitle: "مریض کے پروفائل کو کھولنے کے لیے قطار پر کلک کریں", search: "مریض تلاش کریں", patient: "مریض", ageSex: "عمر / جنس", lastVisit: "آخری معائنہ", activeRx: "فعال نسخے", nextAppointment: "اگلی اپائنٹمنٹ", view: "دیکھیں ›", noPatients: "ابھی کوئی مریض نہیں۔", gender: { femaleShort: "ع", maleShort: "م", otherShort: "د" } },
     common: { selectPatient: "مریض منتخب کریں", selectTest: "ٹیسٹ منتخب کریں", cancel: "منسوخ کریں", loadMore: "مزید دیکھیں", pageUnavailable: "یہ صفحہ دستیاب نہیں ہے۔", back: "واپس" },
     appointment: { yearsShort: "سال" }, status: { lab: { requested: "درخواست کردہ", scheduled: "طے شدہ", in_progress: "جاری", ready: "تیار", cancelled: "منسوخ" } }, tryAgain: "دوبارہ کوشش کریں",
     errors: { NOT_FOUND: "یہ صفحہ دستیاب نہیں ہے۔", ALREADY_CHECKED_IN: "مریض پہلے ہی چیک اِن ہو چکا ہے۔", NOT_TODAY: "یہ اپائنٹمنٹ آج کے لیے مقرر نہیں ہے۔", NOT_CHECKED_IN: "پہلے مریض کا چیک اِن ضروری ہے۔", INVALID_TRANSITION: "اس وزٹ کی حیثیت تبدیل نہیں کی جا سکتی۔", ALREADY_IN_PROGRESS: "پہلے موجودہ مریض کا معائنہ مکمل کریں۔", QUEUE_HELD: "اس سے پہلے آنے والے مریض کی جگہ محفوظ ہے۔", NOT_NEXT: "قطار میں اگلا مریض کوئی اور ہے۔", VISIT_NOT_IN_PROGRESS: "نسخہ صرف جاری اپائنٹمنٹ کے دوران لکھا جا سکتا ہے۔", SCHEDULE_INVALID: "براہ کرم ہفتہ وار شیڈول کی معلومات درست کریں۔", SUMMARY_UNAVAILABLE: "طبی خلاصہ تیار نہیں ہو سکا۔ کچھ دیر بعد دوبارہ کوشش کریں۔", VALIDATION_ERROR: "براہ کرم درج کردہ معلومات درست کریں۔", NETWORK: "نیٹ ورک سے رابطہ نہیں ہو سکا۔", GENERIC: "درخواست مکمل نہیں ہو سکی۔" },

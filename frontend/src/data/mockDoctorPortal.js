@@ -97,7 +97,24 @@ export const mockDoctorPortalService={
    if(item.appointment_id!=null&&(!linked||linked.patient_id!==item.patient_id))error("NOT_FOUND",404);
    return {id:item.id,rx_no:item.rx_no,patient_id:item.patient_id,patient_name:item.patient_name,issued_on:item.issued_on,duration_days:item.duration_days,status:effectivePrescriptionStatus(item),doctor:{name:doctor().full_name,department:doctor().department||null},patient:{name:person.full_name,age:person.age??null,gender:person.gender??null},appointment:linked?{id:linked.id,booking_no:linked.booking_no,starts_at:linked.starts_at,token_no:linked.token_no??null,room_label:linked.room_label||""}:null,items:clone(item.items||[]),instructions:item.instructions||""};
  },
- async listPatients(params={}){await delay();const rows=people.filter(p=>hasDoctorRelationship(p.id)&&(!params.q||p.full_name.toLowerCase().includes(params.q.toLowerCase()))).map(p=>({id:p.id,full_name:p.full_name,age:p.age,gender:p.gender,last_visit:appts.find(a=>a.patient_id===p.id)?.starts_at||null,active_rx_count:rx.filter(r=>r.patient_id===p.id&&r.status==="active").length,next_appointment:null}));return {items:rows.slice(params.offset||0,(params.offset||0)+(params.limit||25)),total:rows.length};}, async getPatientOptions(){await delay();return people.filter(p=>hasDoctorRelationship(p.id)).map(({id,full_name,age})=>({id,full_name,age}));}, async getPatient(id){await delay();return patientProfile(id);},
+ async listPatients(params={}){
+   await delay();
+   const ownerId=String(doctor().id),now=Date.now();
+   const dateKey=(value)=>new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(value));
+   const today=dateKey(now),query=String(params.q||"").trim().toLocaleLowerCase();
+   const rows=people.filter((person)=>hasDoctorRelationship(person.id)&&(!query||person.full_name.toLocaleLowerCase().includes(query))).map((person)=>{
+     const patientAppointments=appts.filter((appointment)=>appointment.patient_id===person.id);
+     const lastVisit=patientAppointments.filter((appointment)=>["confirmed","completed"].includes(appointment.status)&&appointment.visit_status==="completed"&&appointment.completed_at)
+       .sort((a,b)=>Date.parse(b.completed_at)-Date.parse(a.completed_at))[0];
+     const activeRx=rx.filter((item)=>(item.doctor_id==null||String(item.doctor_id)===ownerId)&&item.patient_id===person.id&&effectivePrescriptionStatus(item,now)==="active");
+     // Upcoming means a later hospital-local date; same-day queue slots are shown on the dashboard.
+     const nextAppointment=patientAppointments.filter((appointment)=>["pending","confirmed"].includes(appointment.status)&&dateKey(appointment.starts_at)>today)
+       .sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at))[0];
+     return {id:person.id,full_name:person.full_name,age:person.age??null,gender:person.gender??null,last_visit:lastVisit?.completed_at??null,active_rx_count:activeRx.length,next_appointment:nextAppointment?.starts_at??null};
+   }).sort((a,b)=>a.full_name.localeCompare(b.full_name));
+   const offset=Math.max(0,Number(params.offset)||0),limit=Math.max(0,Number(params.limit)||25);
+   return {items:clone(rows.slice(offset,offset+limit)),total:rows.length};
+ }, async getPatientOptions(){await delay();return people.filter(p=>hasDoctorRelationship(p.id)).map(({id,full_name,age})=>({id,full_name,age}));}, async getPatient(id){await delay();return patientProfile(id);},
  async getSummaryBase(id,appointment_id){
    await delay();
    const p=people.find(x=>String(x.id)===String(id));
