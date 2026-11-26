@@ -153,6 +153,15 @@ cd frontend && npm run dev
 Open `http://localhost:5173/register` to create a patient account, or sign in at `http://localhost:5173/login` and select **Patient**. The embedded app URL defaults to `http://localhost:5174`; set `VITE_MEDICAL_ASSISTANT_FRONTEND_URL` if it runs elsewhere. CityHospital owns model routing, fallback, usage records, and admin settings.
 # Doctor portal
 
-The doctor frontend lives under `/doctor` and includes the dashboard, availability, queue, appointment, clinical summary, prescription, patient, and lab test screens. Design references are in [`docs/design/doctor-portal`](docs/design/doctor-portal/).
+Sign in with the seeded **Doctor** account and open `/doctor` to access the doctor-only portal. It includes the dashboard, availability, patient queue, appointment, clinical summary, prescription, patient, and lab-test screens. Design references are in [`docs/design/doctor-portal`](docs/design/doctor-portal/).
 
-The frontend defaults to the in-memory doctor API (`VITE_DOCTOR_API_MODE=mock` in `frontend/.env.example`) so the portal can run without the separately delivered backend. Set `VITE_DOCTOR_API_MODE=live` to use the `/doctor` endpoints through the configured API base URL.
+The portal defaults to in-memory demo data (`VITE_DOCTOR_API_MODE=mock` in `frontend/.env.example`), so it can be explored without the separately delivered doctor backend. Demo changes last only while the frontend remains loaded. Set `VITE_DOCTOR_API_MODE=live` to use the `/doctor` endpoints through the configured API base URL once that backend is available.
+
+| Area | Route |
+|---|---|
+| Dashboard | `/doctor` |
+| Availability | `/doctor/availability` |
+| Patient queue | `/doctor/queue` |
+| Prescriptions | `/doctor/prescriptions` |
+| Patients | `/doctor/patients` |
+| Lab tests | `/doctor/lab-tests` |
