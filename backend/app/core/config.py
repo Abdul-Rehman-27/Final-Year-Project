@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     SEED_ADMIN_EMAIL: str = "harooonijaz123@gmail.com"
     SEED_ADMIN_PASSWORD: str = "Admin@12345"
+    SEED_DOCTOR_EMAIL: str = "imran.malik@cityhospital.pk"
+    SEED_DOCTOR_PASSWORD: str = "Doctor@12345"
 
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

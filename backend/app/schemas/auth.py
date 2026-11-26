@@ -78,7 +78,7 @@ class LoginRequest(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     email: EmailStr
-    role: Literal["patient", "admin"]
+    role: Literal["patient", "doctor", "admin"]
 
     @field_validator("email")
     @classmethod

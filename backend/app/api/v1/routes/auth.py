@@ -36,8 +36,8 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email, password or role")
     except auth_service.AccountDisabled:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account has been disabled")
-    if user.role == "admin":
-        write_audit(db, user.id, "admin_login", "auth", {}, {"role": user.role})
+    if user.role in {"admin", "doctor"}:
+        write_audit(db, user.id, f"{user.role}_login", "auth", {}, {"role": user.role})
         db.commit()
     return _token_response(user)
 
