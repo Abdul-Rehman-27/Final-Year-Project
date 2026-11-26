@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { authService } from "../services/authService.js";
-import { clearSession, loadSession, saveSession } from "../services/session.js";
+import { clearSession, loadSession, saveSession, writeHandoff } from "../services/session.js";
 
 const AuthContext = createContext(null);
 
@@ -11,6 +11,20 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (session.token && session.user) saveSession({ access_token: session.token, user: session.user });
   }, [session]);
+
+  useEffect(() => {
+    const handleClick = (event) => {
+      const link = event.target?.closest?.('a[target="_blank"]');
+      if (!link) return;
+      try {
+        if (new URL(link.href, location.href).origin === location.origin) writeHandoff();
+      } catch {
+        /* ignore malformed links */
+      }
+    };
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, []);
 
   const applySession = useCallback((data) => {
     saveSession(data);
