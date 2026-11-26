@@ -34,6 +34,7 @@ import DoctorPrescriptions from "../pages/doctor/DoctorPrescriptions.jsx";
 import DoctorPatients from "../pages/doctor/DoctorPatients.jsx";
 import DoctorPatientProfile from "../pages/doctor/DoctorPatientProfile.jsx";
 import DoctorLabTests from "../pages/doctor/DoctorLabTests.jsx";
+import DoctorPrintDev from "../pages/doctor/DoctorPrintDev.jsx";
 
 export default function AppRoutes() {
   return (
@@ -68,6 +69,7 @@ export default function AppRoutes() {
         <Route path="patients/:patientId" element={<DoctorPatientProfile />} />
         <Route path="patients/:patientId/summary" element={<DoctorSummary />} />
         <Route path="lab-tests" element={<DoctorLabTests />} />
+        {import.meta.env.DEV && <Route path="dev/print" element={<DoctorPrintDev />} />}
       </Route>
 
       {/* Admin portal: sidebar layout + nested pages */}
