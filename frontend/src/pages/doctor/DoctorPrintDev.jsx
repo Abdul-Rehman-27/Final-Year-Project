@@ -4,8 +4,9 @@ import Alert from "../../components/common/Alert.jsx";
 import Button from "../../components/common/Button.jsx";
 import Card from "../../components/common/Card.jsx";
 import { useDoctorContext } from "../../context/DoctorContext.jsx";
+import { useLanguage } from "../../context/LanguageContext.jsx";
 import { doctorPortalService } from "../../services/doctorPortalService.js";
-import { printPrescription } from "../../components/doctor/print/PrintDocuments.jsx";
+import { printPatientProfile, printPrescription } from "../../components/doctor/print/PrintDocuments.jsx";
 
 const DEV_DRAFT_PRESCRIPTION = {
   rx_no: "Draft",
@@ -21,15 +22,30 @@ const DEV_DRAFT_PRESCRIPTION = {
 };
 
 export default function DoctorPrintDev() {
-  const { hospital } = useDoctorContext();
+  const { t } = useLanguage();
+  const { hospital, profile: doctor } = useDoctorContext();
   const [prescription, setPrescription] = useState(null);
+  const [patientProfile, setPatientProfile] = useState(null);
   const [error, setError] = useState(null);
+  const [patientError, setPatientError] = useState(null);
 
   useEffect(() => {
     let active = true;
     doctorPortalService.getPrescription(1042)
       .then((detail) => active && setPrescription(detail))
       .catch((reason) => active && setError(reason));
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    doctorPortalService.getPatientOptions()
+      .then((patients) => {
+        if (!patients.length) throw new Error("No mock patient is available.");
+        return doctorPortalService.getPatientProfile(patients[0].id);
+      })
+      .then((profile) => active && setPatientProfile(profile))
+      .catch((reason) => active && setPatientError(reason));
     return () => { active = false; };
   }, []);
 
@@ -40,12 +56,16 @@ export default function DoctorPrintDev() {
         <h1 className="text-3xl font-black">Print preview checks</h1>
       </div>
       {error && <Alert>{error.message || "Could not load Rx-1042."}</Alert>}
+      {patientError && <Alert>{patientError.message || "Could not load a patient profile."}</Alert>}
       <Card className="flex flex-wrap gap-3 p-5">
         <Button fullWidth={false} disabled={!prescription} onClick={() => printPrescription(prescription, hospital)}>
           Print Rx-1042
         </Button>
         <Button fullWidth={false} variant="secondary" onClick={() => printPrescription(DEV_DRAFT_PRESCRIPTION, hospital, { draft: true })}>
           Print draft prescription
+        </Button>
+        <Button fullWidth={false} disabled={!patientProfile} onClick={() => printPatientProfile(patientProfile, doctor, hospital)}>
+          {t("doctor.printDev.patientProfile")}
         </Button>
       </Card>
     </div>

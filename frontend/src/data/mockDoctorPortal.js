@@ -13,7 +13,7 @@ const rx=[{id:1042,rx_no:"Rx-1042",patient_id:1,patient_name:people[0].full_name
 let reports=[{id:1,appointment_id:3,report_no:"LAB-1001",test_name:"Complete blood count",kind:"lab",patient_id:2,patient_name:people[1].full_name,status:"ready",created_at:iso(-5*1440),scheduled_for:null,notes:"",results:[{test:"Hemoglobin",result:"13.2",unit:"g/dL",reference:"12.0–15.5",flag:"normal"},{test:"WBC",result:"6.8",unit:"×10³/µL",reference:"4.0–11.0",flag:"normal"},{test:"Platelets",result:"245",unit:"×10³/µL",reference:"150–450",flag:"normal"},{test:"RBC",result:"4.6",unit:"×10⁶/µL",reference:"4.0–5.2",flag:"normal"}],comments:"All values are within the reference range. Results should be read together with your clinical history.",files:[]},{id:2,appointment_id:3,report_no:"RAD-1001",test_name:"Chest X-ray",kind:"radiology",patient_id:2,patient_name:people[1].full_name,status:"ready",created_at:iso(-3*1440),scheduled_for:null,notes:"",results:[],findings:"Lungs are clear. Heart size is normal. No pleural effusion. Bony structures are intact.",impression:"No acute cardiopulmonary findings.",comments:"",reported_by_name:"Dr. Omar Sheikh",files:[{id:1,kind:"image",caption:"Frontal (PA) view"}]},{id:3,report_no:"LAB-1002",test_name:"Lipid profile",kind:"lab",patient_id:1,patient_name:people[0].full_name,status:"scheduled",created_at:iso(-1*1440),scheduled_for:iso(1440),notes:"",results:[],files:[]},{id:4,report_no:"LAB-1003",test_name:"Liver function",kind:"lab",patient_id:2,patient_name:people[1].full_name,status:"in_progress",created_at:iso(-2*1440),scheduled_for:null,notes:"",results:[],files:[]},{id:5,report_no:"LAB-1004",test_name:"ECG",kind:"lab",patient_id:3,patient_name:people[2].full_name,status:"cancelled",created_at:iso(-9*1440),scheduled_for:null,notes:"",results:[]}];
 const labTests=["Complete blood count","Lipid profile","Blood sugar","Liver function","Chest X-ray","ECG"].map((name,i)=>({id:i+1,name,kind:i===4?"radiology":"lab",prep_note:i===1?"Fasting is usually required — follow the lab's instructions.":""}));
 reports.forEach((report)=>{report.doctor_id=doctor().id;});
-rx.push({id:987,rx_no:"Rx-0987",doctor_id:"other-doctor",patient_id:1,patient_name:people[0].full_name,issued_on:new Date(now-5*86400000).toISOString().slice(0,10),duration_days:14,status:"active",items:[],instructions:""});
+rx.push({id:987,rx_no:"Rx-0987",doctor_id:"other-doctor",doctor_name:"Dr. Farah Qureshi",patient_id:1,patient_name:people[0].full_name,issued_on:new Date(now-5*86400000).toISOString().slice(0,10),duration_days:14,status:"active",items:[],instructions:""});
 const error=(code,status=409)=>{throw Object.assign(new Error(code),{code,status});}; const delay=()=>new Promise(r=>setTimeout(r,150+Math.random()*200)); const clone=x=>JSON.parse(JSON.stringify(x));
 const nowMs=()=>Date.now();
 function buildQueue(appointments,nowMs,graceMinutes=5,tz=TZ){
@@ -43,7 +43,18 @@ function appointmentDetail(id){
  return {id:a.id,booking_no:a.booking_no,token_no:a.token_no??null,starts_at:a.starts_at,checked_in_at:a.checked_in_at??null,called_at:a.called_at??null,completed_at:a.completed_at??null,status:a.status,visit_status:a.visit_status,queue_state:entry?.queue_state||"none",reason:a.reason??null,source:a.source||"portal",room_label:a.room_label||"",can_call:entry?.can_call??false,patient:{id:patient.id,full_name:patient.full_name,age:patient.age??null,gender:patient.gender??null},prescriptions:rx.filter(item=>String(item.appointment_id)===String(a.id)).map(item=>({id:item.id,rx_no:item.rx_no,patient_id:item.patient_id,patient_name:item.patient_name,issued_on:item.issued_on,duration_days:item.duration_days,status:effectivePrescriptionStatus(item)})),lab_reports:reports.filter(item=>String(item.appointment_id)===String(a.id)).map(({id,report_no,test_name,kind,patient_id,patient_name,status,created_at,scheduled_for})=>({id,report_no,test_name,kind,patient_id,patient_name,status,created_at,scheduled_for}))};
 }
 function hasDoctorRelationship(patientId){return appts.some(a=>String(a.patient_id)===String(patientId)&&["confirmed","completed"].includes(a.status));}
-function patientProfile(id){const p=people.find(x=>String(x.id)===String(id));if(!p||!hasDoctorRelationship(p.id))error("NOT_FOUND",404);return {...p,prescriptions:rx.filter(r=>r.patient_id===p.id).map(r=>({...r,doctor_name:doctor().full_name})),appointments:appts.filter(a=>a.patient_id===p.id).map(a=>({id:a.id,starts_at:a.starts_at,doctor_name:doctor().full_name,department:doctor().department,status:a.status,visit_status:a.visit_status,token_no:a.token_no,booking_no:a.booking_no}))};}
+const otherDoctorAppointments=[{id:91,patient_id:1,starts_at:iso(-60*1440),doctor_name:"Dr. Farah Qureshi",department:"Family Medicine",status:"completed",visit_status:"completed",token_no:null,booking_no:"APT-HIST-91"}];
+function patientProfile(id){
+ const p=people.find(x=>String(x.id)===String(id));
+ if(!p||!hasDoctorRelationship(p.id))error("NOT_FOUND",404);
+ const prescriptions=rx.filter(item=>item.patient_id===p.id).map(item=>({id:item.id,rx_no:item.rx_no,issued_on:item.issued_on,duration_days:item.duration_days,status:effectivePrescriptionStatus(item),doctor_name:item.doctor_name||(item.doctor_id!=null&&String(item.doctor_id)!==String(doctor().id)?"Doctor":doctor().full_name),items:clone(item.items||[]),instructions:item.instructions||""}))
+   .sort((a,b)=>String(b.issued_on).localeCompare(String(a.issued_on))||Number(b.id)-Number(a.id));
+ const ownAppointments=appts.filter(item=>item.patient_id===p.id).map(item=>({...item,doctor_name:item.doctor_name||doctor().full_name,department:item.department??doctor().department}));
+ const appointments=[...ownAppointments,...otherDoctorAppointments.filter(item=>item.patient_id===p.id)]
+   .map(({id,starts_at,doctor_name,department,status,visit_status,token_no,booking_no})=>({id,starts_at,doctor_name,department:department??null,status,visit_status,token_no:token_no??null,booking_no}))
+   .sort((a,b)=>Date.parse(b.starts_at)-Date.parse(a.starts_at)).slice(0,50);
+ return {...p,prescriptions,appointments};
+}
 export { buildQueue, appointmentRow, queueItem, delay, nowMs };
 export function reject(code,status=409){throw Object.assign(new Error(code),{code,status});}
 export function createMockApi(user){
@@ -114,7 +125,7 @@ export const mockDoctorPortalService={
    }).sort((a,b)=>a.full_name.localeCompare(b.full_name));
    const offset=Math.max(0,Number(params.offset)||0),limit=Math.max(0,Number(params.limit)||25);
    return {items:clone(rows.slice(offset,offset+limit)),total:rows.length};
- }, async getPatientOptions(){await delay();return people.filter(p=>hasDoctorRelationship(p.id)).map(({id,full_name,age})=>({id,full_name,age}));}, async getPatient(id){await delay();return patientProfile(id);},
+ }, async getPatientOptions(){await delay();return people.filter(p=>hasDoctorRelationship(p.id)).map(({id,full_name,age})=>({id,full_name,age}));}, async getPatient(id){await delay();return patientProfile(id);}, async getPatientProfile(id){await delay();return patientProfile(id);},
  async getSummaryBase(id,appointment_id){
    await delay();
    const p=people.find(x=>String(x.id)===String(id));

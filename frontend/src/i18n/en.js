@@ -423,7 +423,7 @@ export default {
     placeholder: "This dashboard will be built in the next phase.",
     logout: "Log out",
   },
-  doctor: { portalLabel:"Doctor portal", mockChip:"Demo data — mock API", comingSoon:"This screen is being built.", tryAgain:"Try again", loadError:"Could not load doctor portal data.", notFound:"This page is not available.", back:"Go back", backToDashboard:"Back to dashboard", pageUnavailable:"This page is not available.",
+  doctor: { portalLabel:"Doctor portal", mockChip:"Demo data — mock API", comingSoon:"This screen is being built.", tryAgain:"Try again", loadError:"Could not load doctor portal data.", notFound:"This page is not available.", back:"Go back", backToDashboard:"Back to dashboard", pageUnavailable:"This page is not available.", printDev:{patientProfile:"Print patient profile"},
     nav:{dashboard:"Dashboard",queue:"Patient queue",prescriptions:"Prescriptions",patients:"Patients",labTests:"Lab tests"},
     days:{short:{mon:"Mon",tue:"Tue",wed:"Wed",thu:"Thu",fri:"Fri",sat:"Sat",sun:"Sun"},long:{mon:"Monday",tue:"Tuesday",wed:"Wednesday",thu:"Thursday",fri:"Friday",sat:"Saturday",sun:"Sunday"}},
     gender:{male:"Male",female:"Female",other:"Other",maleShort:"M",femaleShort:"F",otherShort:"Other"},

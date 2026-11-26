@@ -464,6 +464,7 @@ export default {
     },
   },
   doctor: {
+    printDev: { patientProfile: "مریض کا پروفائل پرنٹ کریں" },
     gender: { maleShort: "م", femaleShort: "ع", otherShort: "دیگر" },
     patients: { title: "مریض", subtitle: "مریض کے پروفائل کو کھولنے کے لیے قطار پر کلک کریں", search: "مریض تلاش کریں", patient: "مریض", ageSex: "عمر / جنس", lastVisit: "آخری معائنہ", activeRx: "فعال نسخے", nextAppointment: "اگلی اپائنٹمنٹ", view: "دیکھیں ›", noPatients: "ابھی کوئی مریض نہیں۔", gender: { femaleShort: "ع", maleShort: "م", otherShort: "د" } },
     common: { selectPatient: "مریض منتخب کریں", selectTest: "ٹیسٹ منتخب کریں", cancel: "منسوخ کریں", loadMore: "مزید دیکھیں", pageUnavailable: "یہ صفحہ دستیاب نہیں ہے۔", back: "واپس" },
