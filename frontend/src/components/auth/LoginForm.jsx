@@ -48,8 +48,19 @@ export default function LoginForm({ role }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lang]);
 
-  // Clear a stale server error when the user switches role
-  useEffect(() => setServerError(""), [role]);
+  // A reset challenge belongs to one account role; never keep it when the role changes.
+  useEffect(() => {
+    setServerError("");
+    setShowForgot(false);
+    setResetStep("request");
+    setChallengeId("");
+    setResetCode("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setResetMessage("");
+    setResetError("");
+    setResetSuccess("");
+  }, [role]);
 
   const onSubmit = async (values) => {
     setServerError("");
@@ -129,11 +140,11 @@ export default function LoginForm({ role }) {
           error={errors.password?.message}
           {...register("password")}
         />
-        {role !== "doctor" && <div className="mt-2 text-end">
+        <div className="mt-2 text-end">
           <button type="button" onClick={() => { setShowForgot(true); setResetSuccess(""); setResetStep("request"); setResetMessage(""); setResetError(""); }} className="text-sm font-bold text-brand-700 hover:underline">
             {t("auth.forgot")}
           </button>
-        </div>}
+        </div>
       </div></>}
 
       {showForgot && (

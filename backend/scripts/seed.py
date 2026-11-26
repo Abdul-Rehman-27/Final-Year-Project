@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 SEEDS = [
     ("Hamza Raza", settings.SEED_ADMIN_EMAIL, settings.SEED_ADMIN_PASSWORD, Role.ADMIN.value),
-    ("Dr. Imran Malik", "imran.malik@cityhospital.pk", "Doctor@12345", Role.DOCTOR.value),
+    ("Dr. Imran Malik", settings.SEED_DOCTOR_EMAIL, settings.SEED_DOCTOR_PASSWORD, Role.DOCTOR.value),
 ]
 
 
