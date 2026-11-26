@@ -84,7 +84,14 @@ export default function DoctorAppointment() {
 
       {location.state?.success && (
         <div className="mb-4">
-          <Alert type="success">{location.state.success}</Alert>
+          <Alert type="success">{typeof location.state.success === "string"
+            ? location.state.success
+            : fill(t(location.state.success.key), location.state.success.values || {})}</Alert>
+        </div>
+      )}
+      {location.state?.error && (
+        <div className="mb-4">
+          <Alert>{errorText(t, location.state.error)}</Alert>
         </div>
       )}
       {actionError && (

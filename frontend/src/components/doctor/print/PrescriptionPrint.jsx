@@ -24,6 +24,16 @@ function localToday(timezone) {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
+function genderLabel(value) {
+  const normalized = String(value || "").toLowerCase();
+  return { male: "Male", female: "Female", other: "Other" }[normalized] || value || "—";
+}
+
+function doctorNameLabel(value) {
+  const name = value || "";
+  return /^dr\.?\s/i.test(name) ? name : `Dr. ${name}`;
+}
+
 function PrescriptionDocument({ detail, hospital, draft }) {
   const patient = detail.patient || {};
   const doctor = detail.doctor || {};
@@ -36,8 +46,8 @@ function PrescriptionDocument({ detail, hospital, draft }) {
     ["DATE ISSUED", issuedDate(issuedOn, hospital?.timezone)],
     ["DURATION", `${detail.duration_days} days`],
     ["PATIENT", patient.name || detail.patient_name],
-    ["AGE / SEX", `${patient.age ?? "—"} y · ${patient.gender || "—"}`],
-    ["DOCTOR", `Dr. ${doctor.name || ""} · ${doctor.department || "—"}`],
+    ["AGE / SEX", `${patient.age ?? "—"} y · ${genderLabel(patient.gender)}`],
+    ["DOCTOR", `${doctorNameLabel(doctor.name)} · ${doctor.department || "—"}`],
   ];
 
   return (
@@ -76,7 +86,7 @@ function PrescriptionDocument({ detail, hospital, draft }) {
         <div className="print-qr">QR</div>
         <div className="print-signature">
           <small>Doctor&apos;s signature &amp; stamp</small>
-          <br /><b dir="auto">{doctor.name || ""}</b>
+          <br /><b dir="auto">{doctorNameLabel(doctor.name)}</b>
         </div>
       </div>
       <footer className="print-foot">

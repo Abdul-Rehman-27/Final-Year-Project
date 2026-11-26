@@ -120,5 +120,22 @@ export const mockDoctorPortalService={
  },
  async saveSchedule(days){return this.putSchedule(days);},
  async getLabTests(){await delay();return clone(labTests);}, async listLabReports(params={}){await delay();const rows=reports.filter(x=>!params.status||x.status===params.status);return {items:clone(rows.slice(params.offset||0,(params.offset||0)+(params.limit||25))),total:rows.length};}, async createLabReport(body){await delay();if(!people.some(p=>p.id===Number(body.patient_id)))error("NOT_FOUND",404);const test=labTests.find(x=>x.id===Number(body.test_id));if(!test)error("NOT_FOUND",404);const appointment=body.appointment_id?findAppointment(body.appointment_id):null;if(appointment&&appointment.patient_id!==Number(body.patient_id))error("NOT_FOUND",404);const item={id:Date.now(),appointment_id:appointment?.id,report_no:`${test.kind==="lab"?"LAB":"RAD"}-${1000+reports.length}`,test_name:test.name,kind:test.kind,patient_id:Number(body.patient_id),patient_name:people[Number(body.patient_id)-1].full_name,status:"requested",created_at:new Date().toISOString(),scheduled_for:null,notes:body.notes||"",results:[],files:[]};reports.unshift(item);return clone(item);}, async getLabReport(id){await delay();const x=reports.find(r=>String(r.id)===String(id));if(!x)error("NOT_FOUND",404);return clone(x);}, async getLabFile(){await delay();error("NOT_FOUND",404);},
- async createPrescription(id,body){await delay();const a=findAppointment(id);if(a.visit_status!=="in_progress")error("VISIT_NOT_IN_PROGRESS");if(!Array.isArray(body.items)||body.items.length<1||body.items.length>10||body.items.some(x=>!x||typeof x.medicine!=="string"||x.medicine.length>100||typeof x.dosage!=="string"||x.dosage.length>60||typeof x.timing!=="string"||x.timing.length>80)||!Number.isInteger(Number(body.duration_days))||Number(body.duration_days)<1||Number(body.duration_days)>365||typeof(body.instructions||"")!=="string"||(body.instructions||"").length>1000)error("INVALID_TRANSITION");const n=Math.max(1000,...rx.map(x=>Number(x.id)))+1,p=people.find(x=>x.id===a.patient_id),r={id:n,rx_no:`Rx-${n}`,patient_id:p.id,patient_name:p.full_name,issued_on:new Date().toISOString().slice(0,10),duration_days:Number(body.duration_days),status:"active",items:body.items.map(x=>({...x})),instructions:body.instructions||"",appointment_id:a.id};rx.unshift(r);return {...clone(r),doctor:{name:doctor().full_name,department:doctor().department},patient:{name:p.full_name,age:p.age,gender:p.gender},appointment:{id:a.id,booking_no:a.booking_no,starts_at:a.starts_at,token_no:a.token_no,room_label:a.room_label}};}
+ async createPrescription(id,body){
+   await delay();
+   const a=findAppointment(id);
+   if(a.doctor_id!=null&&String(a.doctor_id)!==String(doctor().id))error("NOT_FOUND",404);
+   if(a.visit_status!=="in_progress")error("VISIT_NOT_IN_PROGRESS");
+   const items=body?.items;
+   const validItems=Array.isArray(items)&&items.length>=1&&items.length<=10&&items.every(item=>item&&typeof item.medicine==="string"&&item.medicine.trim().length>0&&item.medicine.length<=100&&typeof item.dosage==="string"&&item.dosage.trim().length>0&&item.dosage.length<=60&&typeof item.timing==="string"&&item.timing.trim().length>0&&item.timing.length<=80);
+   const duration=Number(body?.duration_days),instructions=body?.instructions??"";
+   if(!validItems||!Number.isInteger(duration)||duration<1||duration>365||typeof instructions!=="string"||instructions.length>1000)error("VALIDATION_ERROR",422);
+   const n=Math.max(1000,...rx.map(x=>Number(x.id)))+1;
+   const person=people.find(x=>x.id===a.patient_id);
+   const todayParts=new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+   const datePart=(type)=>todayParts.find(part=>part.type===type)?.value||"";
+   const issued_on=`${datePart("year")}-${datePart("month")}-${datePart("day")}`;
+   const record={id:n,rx_no:`Rx-${n}`,patient_id:person.id,patient_name:person.full_name,issued_on,duration_days:duration,status:"active",items:items.map(item=>({...item})),instructions,appointment_id:a.id};
+   rx.unshift(record);
+   return {...clone(record),doctor:{name:doctor().full_name,department:doctor().department||null},patient:{name:person.full_name,age:person.age??null,gender:person.gender??null},appointment:{id:a.id,booking_no:a.booking_no,starts_at:a.starts_at,token_no:a.token_no??null,room_label:a.room_label||""}};
+ }
 };
