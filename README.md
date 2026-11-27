@@ -153,18 +153,23 @@ cd frontend && npm run dev
 Open `http://localhost:5173/register` to create a patient account, or sign in at `http://localhost:5173/login` and select **Patient**. The embedded app URL defaults to `http://localhost:5174`; set `VITE_MEDICAL_ASSISTANT_FRONTEND_URL` if it runs elsewhere. CityHospital owns model routing, fallback, usage records, and admin settings.
 # Doctor portal
 
-Sign in with the seeded **Doctor** account and open `/doctor` to access the doctor-only portal. It includes the dashboard, availability, patient queue, appointment, clinical summary, prescription, patient, and lab-test screens. Design references are in [`docs/design/doctor-portal`](docs/design/doctor-portal/).
-
-The portal defaults to in-memory demo data (`VITE_DOCTOR_API_MODE=mock` in `frontend/.env.example`), so it can be explored without the separately delivered doctor backend. Demo changes last only while the frontend remains loaded. Set `VITE_DOCTOR_API_MODE=live` to use the `/doctor` endpoints through the configured API base URL once that backend is available.
+Sign in with the seeded **Doctor** account and open `/doctor` to access the doctor-only portal. It uses the mock API by default (`VITE_DOCTOR_API_MODE=mock` in `frontend/.env.example`); set `VITE_DOCTOR_API_MODE=live` to call the `/doctor` endpoints through `VITE_API_URL` once that backend is available. Mock data is in-memory and resets when the frontend reloads. Design references and printable document mockups are in [`docs/design/doctor-portal`](docs/design/doctor-portal/). During development, `/doctor/dev/print` provides print previews; that route is omitted from production.
 
 | Area | Route |
 |---|---|
 | Dashboard | `/doctor` |
 | Availability | `/doctor/availability` |
 | Patient queue | `/doctor/queue` |
+| Appointment | `/doctor/queue/:appointmentId` |
+| Appointment medical history | `/doctor/queue/:appointmentId/summary` |
+| Write prescription | `/doctor/queue/:appointmentId/prescription/new` |
 | Prescriptions | `/doctor/prescriptions` |
 | Patients | `/doctor/patients` |
+| Patient profile | `/doctor/patients/:patientId` |
+| Patient medical history | `/doctor/patients/:patientId/summary` |
 | Lab tests | `/doctor/lab-tests` |
+| Print preview checks (development only) | `/doctor/dev/print` |
+
 ## Doctor portal backend
 
 The FastAPI doctor portal API is served beneath `/api/v1/doctor`. Run `python -m scripts.seed_doctor_demo` from `backend/` after the standard seed to create local doctor demonstration data.

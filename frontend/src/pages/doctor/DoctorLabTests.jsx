@@ -1,3 +1,91 @@
-import {useEffect,useMemo,useRef,useState} from "react";import {useSearchParams} from "react-router-dom";import PageHeader from "../../components/common/PageHeader.jsx";import Card from "../../components/common/Card.jsx";import Button from "../../components/common/Button.jsx";import Tabs from "../../components/common/Tabs.jsx";import Select from "../../components/common/Select.jsx";import Textarea from "../../components/common/Textarea.jsx";import DataTable from "../../components/common/DataTable.jsx";import Modal from "../../components/common/Modal.jsx";import Alert from "../../components/common/Alert.jsx";import {useLanguage} from "../../context/LanguageContext.jsx";import {doctorPortalService} from "../../services/doctorPortalService.js";import {LoadState,Status,errorText} from "../../components/doctor/DoctorCommon.jsx";import {formatDate} from "../../utils/datetime.js";
-export default function DoctorLabTests(){const {t,lang}=useLanguage(),[params]=useSearchParams(),patientSelect=useRef(null);const [status,setStatus]=useState("all"),[reports,setReports]=useState([]),[tests,setTests]=useState([]),[patients,setPatients]=useState([]),[patient,setPatient]=useState(params.get("patient")||""),[test,setTest]=useState(""),[notes,setNotes]=useState(""),[linked,setLinked]=useState(null),[selected,setSelected]=useState(null),[error,setError]=useState(null),[success,setSuccess]=useState(""),[loading,setLoading]=useState(true);const reload=()=>doctorPortalService.listLabReports({status:status==="all"?"":status,limit:25,offset:0}).then(r=>setReports(r.items));useEffect(()=>{let active=true;Promise.all([doctorPortalService.listLabReports({limit:25,offset:0}),doctorPortalService.getLabTests(),doctorPortalService.getPatientOptions(),params.get("appointment")?doctorPortalService.getAppointment(params.get("appointment")):Promise.resolve(null)]).then(([r,ts,ps,a])=>{if(active){setReports(r.items);setTests(ts);setPatients(ps);setLinked(a);}}).catch(e=>active&&setError(e)).finally(()=>active&&setLoading(false));return()=>{active=false}},[]);useEffect(()=>{let active=true;doctorPortalService.listLabReports({status:status==="all"?"":status,limit:25,offset:0}).then(r=>active&&setReports(r.items)).catch(e=>active&&setError(e));return()=>{active=false}},[status]);const chosen=tests.find(x=>String(x.id)===test);const create=async()=>{try{const r=await doctorPortalService.createLabReport({patient_id:Number(patient),test_id:Number(test),notes,appointment_id:params.get("appointment")||undefined});setSuccess(`Test requested for ${r.patient_name}.`);setPatient("");setTest("");setNotes("");await reload();}catch(e){setError(e)}};
-return <><PageHeader showLanguage title={t("doctor.labs.title")} subtitle={t("doctor.labs.subtitle")} actions={<Button fullWidth={false} onClick={()=>patientSelect.current?.focus()}>+ {t("doctor.labs.request")}</Button>}/>{success&&<div className="mb-4"><Alert type="success">{success}</Alert></div>}{error&&<div className="mb-4"><Alert>{errorText(t,error)}</Alert></div>}<Tabs variant="pill" active={status} onChange={setStatus} tabs={["all","requested","scheduled","ready"].map(x=>({id:x,label:x[0].toUpperCase()+x.slice(1)}))}/><LoadState loading={loading} error={null} onRetry={()=>setLoading(true)}><div className="grid gap-5 lg:grid-cols-[1.7fr_1fr]"><Card className="p-5"><h2 className="mb-3 text-xl font-black">{t("doctor.labs.requested")}</h2><DataTable dense rows={reports} emptyText={t("doctor.labs.noReports")} columns={[{header:t("doctor.labs.test"),render:r=><b>{r.test_name}</b>},{header:t("doctor.labs.patient"),render:r=>r.patient_name},{header:t("doctor.labs.requestedDate"),render:r=>formatDate(r.created_at,lang)},{header:t("doctor.labs.status"),render:r=><Status value={r.status}/>},{header:"",render:r=><Button size="sm" variant="secondary" fullWidth={false} onClick={async()=>setSelected(await doctorPortalService.getLabReport(r.id))}>View</Button>}]}/></Card><Card className="space-y-4 p-5"><h2 className="text-xl font-black">{t("doctor.labs.request")}</h2><Select ref={patientSelect} id="lab-patient" label={t("doctor.labs.patient")} value={patient} onChange={e=>setPatient(e.target.value)}><option value="">{t("doctor.common.selectPatient")}</option>{patients.map(p=><option key={p.id} value={p.id}>{p.full_name} · {p.age} y</option>)}</Select><Select id="lab-test" label={t("doctor.labs.test")} value={test} onChange={e=>setTest(e.target.value)}><option value="">{t("doctor.common.selectTest")}</option>{tests.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</Select>{chosen?.prep_note&&<div className="rounded-xl border border-dashed border-brand-600 bg-brand-50 px-4 py-3 text-brand-800">Preparation: {chosen.prep_note}</div>}{linked&&<p className="text-sm text-ink-muted">Linked to appointment {linked.token_no}</p>}<Textarea id="lab-notes" label={t("doctor.labs.notes")} optional rows={4} maxLength={500} value={notes} onChange={e=>setNotes(e.target.value)}/><div className="flex justify-end gap-3"><Button variant="secondary" fullWidth={false} onClick={()=>{setPatient("");setTest("");setNotes("")}}>{t("doctor.common.cancel")}</Button><Button fullWidth={false} disabled={!patient||!test} onClick={create}>{t("doctor.labs.send")}</Button></div></Card></div></LoadState><Modal open={!!selected} title={selected?.test_name} onClose={()=>setSelected(null)}>{selected&&<div className="space-y-3"><p dir="ltr">{selected.report_no}</p><p>{selected.patient_name}</p><Status value={selected.status}/><p>{formatDate(selected.created_at,lang)}</p>{selected.notes&&<p>{selected.notes}</p>}{selected.results?.length>0&&selected.results.map((x,i)=><p key={i}>{x.test}: {x.result} {x.unit} ({x.reference}) · {x.flag}</p>)}{selected.findings&&<p>{selected.findings}</p>}{selected.impression&&<p>{selected.impression}</p>}{selected.comments&&<p>{selected.comments}</p>}</div>}</Modal></>}
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import PageHeader from "../../components/common/PageHeader.jsx";
+import Card from "../../components/common/Card.jsx";
+import Button from "../../components/common/Button.jsx";
+import Tabs from "../../components/common/Tabs.jsx";
+import DataTable from "../../components/common/DataTable.jsx";
+import Alert from "../../components/common/Alert.jsx";
+import LabRequestForm from "../../components/doctor/LabRequestForm.jsx";
+import LabReportModal from "../../components/doctor/LabReportModal.jsx";
+import { LoadState, Status, errorText } from "../../components/doctor/DoctorCommon.jsx";
+import { useDoctorContext } from "../../context/DoctorContext.jsx";
+import { useLanguage } from "../../context/LanguageContext.jsx";
+import { doctorPortalService } from "../../services/doctorPortalService.js";
+import { fill } from "../../utils/format.js";
+import { formatDate } from "../../utils/datetime.js";
+
+const PAGE_SIZE = 25;
+function formatRequestedDate(iso, lang, timeZone) {
+  const parts = new Intl.DateTimeFormat(lang === "ur" ? "ur-PK-u-nu-latn" : "en-GB", { timeZone: timeZone || "Asia/Karachi", day: "2-digit", month: "short" }).formatToParts(new Date(iso));
+  return `${parts.find((part) => part.type === "day")?.value || ""} ${parts.find((part) => part.type === "month")?.value || ""}`;
+}
+export default function DoctorLabTests() {
+  const { t, lang } = useLanguage();
+  const { hospital } = useDoctorContext();
+  const [params] = useSearchParams();
+  const patientSelect = useRef(null), formRef = useRef(null);
+  const [status, setStatus] = useState("all"), [reports, setReports] = useState([]), [total, setTotal] = useState(0), [offset, setOffset] = useState(0);
+  const [tests, setTests] = useState([]), [patients, setPatients] = useState([]);
+  const [patient, setPatient] = useState(params.get("patient") || ""), [test, setTest] = useState(""), [notes, setNotes] = useState("");
+  const [linked, setLinked] = useState(null), [listLoading, setListLoading] = useState(true), [loadingMore, setLoadingMore] = useState(false), [listError, setListError] = useState(null), [retry, setRetry] = useState(0);
+  const [selected, setSelected] = useState(null), [detailLoading, setDetailLoading] = useState(false), [detailError, setDetailError] = useState(null), [detailRetry, setDetailRetry] = useState(0);
+  const [error, setError] = useState(null), [success, setSuccess] = useState(""), [submitting, setSubmitting] = useState(false);
+
+  const loadList = useCallback(async (append = false) => {
+    setListError(null); setListLoading(!append); setLoadingMore(append);
+    try {
+      const result = await doctorPortalService.listLabReports({ status: status === "all" ? "" : status, limit: PAGE_SIZE, offset: append ? offset : 0 });
+      setReports((current) => append ? [...current, ...result.items] : result.items); setTotal(result.total);
+    } catch (err) { setListError(err); }
+    finally { setListLoading(false); setLoadingMore(false); }
+  }, [status, offset]);
+  useEffect(() => { loadList(offset > 0); }, [loadList, retry]);
+  useEffect(() => {
+    let active = true;
+    Promise.all([doctorPortalService.getLabTests(), doctorPortalService.getPatientOptions(), params.get("appointment") ? doctorPortalService.getAppointment(params.get("appointment")) : Promise.resolve(null)])
+      .then(([catalogue, options, appointment]) => { if (!active) return; setTests(catalogue); setPatients(options); setLinked(appointment); if (appointment) setPatient(String(appointment.patient.id)); })
+      .catch((err) => { if (active) setError(err); });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (!selected) { setDetailError(null); setDetailLoading(false); return undefined; }
+    let active = true; setDetailLoading(true); setDetailError(null);
+    doctorPortalService.getLabReport(selected.id).then((result) => active && setSelected(result)).catch((err) => active && setDetailError(err)).finally(() => active && setDetailLoading(false));
+    return () => { active = false; };
+  }, [selected?.id, detailRetry]);
+  const chooseStatus = (value) => { setStatus(value); setOffset(0); setReports([]); };
+  const resetForm = () => { setPatient(""); setTest(""); setNotes(""); };
+  const submit = async () => {
+    setSubmitting(true); setError(null); setSuccess("");
+    try {
+      const created = await doctorPortalService.createLabReport({ patient_id: Number(patient), test_id: Number(test), notes, ...(params.get("appointment") ? { appointment_id: params.get("appointment") } : {}) });
+      setSuccess(fill(t("doctor.lab.success"), { name: created.patient_name })); resetForm(); setReports([]); setTotal(0); setOffset(0); setRetry((value) => value + 1);
+    } catch (err) { setError(err); }
+    finally { setSubmitting(false); }
+  };
+  const openReport = (row) => { setSelected({ id: row.id }); setDetailError(null); };
+  const retryDetail = () => setDetailRetry((value) => value + 1);
+  const retryList = () => setRetry((value) => value + 1);
+  const rows = reports;
+  return <>
+    <PageHeader showLanguage title={t("doctor.lab.title")} subtitle={t("doctor.lab.subtitle")} actions={<Button fullWidth={false} onClick={() => { formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); setTimeout(() => patientSelect.current?.focus(), 0); }}>+ {t("doctor.lab.request")}</Button>} />
+    {success && <div className="mb-4"><Alert type="success">{success}</Alert></div>}
+    {error && <div className="mb-4"><Alert>{errorText(t, error)}</Alert></div>}
+    <Tabs variant="pill" active={status} onChange={chooseStatus} tabs={["all", "requested", "scheduled", "ready"].map((id) => ({ id, label: t(`doctor.lab.tabs.${id}`) }))} />
+    <LoadState loading={listLoading} error={listError} onRetry={retryList}>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[1.7fr_1fr]">
+        <Card className="min-w-0 p-5"><h2 className="mb-3 text-xl font-black">{t("doctor.lab.requested")}</h2>
+          <DataTable rows={rows} emptyText={t("doctor.lab.noReports")} columns={[
+            { header: t("doctor.lab.test"), render: (row) => <b>{row.test_name}</b> }, { header: t("doctor.lab.patient"), render: (row) => row.patient_name },
+            { header: t("doctor.lab.requestedDate"), render: (row) => formatRequestedDate(row.created_at, lang, hospital?.timezone) }, { header: t("doctor.lab.status"), render: (row) => <Status value={row.status} /> },
+            { header: "", render: (row) => <Button size="sm" variant="secondary" fullWidth={false} onClick={() => openReport(row)}>{t("doctor.lab.view")}</Button> },
+          ]} />
+          {rows.length < total && <div className="mt-4"><Button variant="secondary" fullWidth={false} loading={loadingMore} onClick={() => setOffset(rows.length)}>{t("doctor.common.loadMore")}</Button></div>}
+        </Card>
+        <div ref={formRef} className="scroll-mt-5"><LabRequestForm t={t} patientSelect={patientSelect} patients={patients} tests={tests} patient={patient} setPatient={setPatient} test={test} setTest={setTest} notes={notes} setNotes={setNotes} linked={linked} onSubmit={submit} onCancel={resetForm} submitting={submitting} /></div>
+      </div>
+    </LoadState>
+    <LabReportModal report={selected?.test_name ? selected : null} loading={detailLoading} error={detailError} onClose={() => { setSelected(null); setDetailError(null); }} onRetry={retryDetail} />
+  </>;
+}

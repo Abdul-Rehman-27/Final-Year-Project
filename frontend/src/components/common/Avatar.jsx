@@ -1,4 +1,4 @@
-const SIZES = { sm: "h-10 w-10 text-sm", lg: "h-20 w-20 text-2xl" };
+const SIZES = { sm: "h-10 w-10 text-sm", md: "h-16 w-16 text-xl", lg: "h-20 w-20 text-2xl" };
 
 // "Dr. Sara Khan" -> "SK"
 const initials = (name = "") =>
