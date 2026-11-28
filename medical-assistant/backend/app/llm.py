@@ -1,0 +1,133 @@
+import httpx
+from app.core import settings
+
+
+class TokenLimitReached(Exception):
+    pass
+
+
+class GroqAPIError(Exception):
+    pass
+
+
+def _error_text(response):
+    try:
+        return str(response.json().get("error", {}).get("message", response.text)).lower()
+    except Exception:
+        return response.text.lower()
+
+
+def _token_limit(text):
+    return any(term in text for term in ("context_length", "maximum context", "token limit", "tokens per minute", "tokens per day", "too many tokens", "prompt is too long"))
+
+
+async def groq_chat(messages, max_tokens=1500, json_mode=False, model=None, timeout=90):
+    if not settings.GROQ_API_KEY:
+        raise RuntimeError("GroqCloud API key is not configured.")
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        model = model or settings.GROQ_MODEL
+        body = {"model": model, "messages": messages, "max_completion_tokens": max_tokens, "temperature": 0.1}
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+        response = await client.post(f"{settings.GROQ_BASE_URL.rstrip('/')}/chat/completions", headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"}, json=body)
+    if response.is_error:
+        message = _error_text(response)
+        if _token_limit(message):
+            raise TokenLimitReached(message)
+        raise GroqAPIError(f"GroqCloud request failed ({response.status_code}).")
+    payload = response.json()
+    choice = payload["choices"][0]
+    return {"text": choice["message"]["content"], "usage": payload.get("usage", {}), "provider": "groq", "model": model, "finish_reason": choice.get("finish_reason")}
+
+
+async def ollama_chat(messages, max_tokens=700, json_mode=False, selected_model=None, timeout=120):
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        tags = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/tags")
+        tags.raise_for_status()
+        available = [model["name"] for model in tags.json().get("models", [])]
+        model = selected_model or settings.OLLAMA_MODEL or (available[0] if available else "")
+        if not model or model not in available:
+            raise RuntimeError("No available Ollama model is configured or installed.")
+        request_body = {"model": model, "messages": messages, "stream": False, "options": {"num_predict": max_tokens, "temperature": 0.1}}
+        if json_mode:
+            request_body["format"] = "json"
+        response = await client.post(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/chat", json=request_body)
+        response.raise_for_status()
+    payload = response.json()
+    prompt = payload.get("prompt_eval_count", 0)
+    completion = payload.get("eval_count", 0)
+    return {"text": payload["message"]["content"], "usage": {"prompt_tokens": prompt, "completion_tokens": completion, "total_tokens": prompt + completion}, "provider": "ollama", "model": model, "finish_reason": payload.get("done_reason") or "stop"}
+
+
+async def chat(messages, max_tokens=700, json_mode=False, provider="groq", groq_model=None, ollama_model=None, auto_fallback=True, no_timeout=False):
+    groq_timeout = None if no_timeout else 90
+    ollama_timeout = None if no_timeout else 120
+    if provider == "ollama":
+        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
+        result["fallback_used"] = False
+        result["fallback_reason"] = None
+        return result
+    try:
+        result = await groq_chat(messages, max_tokens, json_mode, groq_model, groq_timeout)
+        if result.get("finish_reason") == "length":
+            if auto_fallback:
+                result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
+                result["fallback_used"] = True
+                result["fallback_reason"] = "token_limit"
+            else:
+                result["fallback_used"] = False
+                result["fallback_reason"] = None
+        else:
+            result["fallback_used"] = False
+            result["fallback_reason"] = None
+        return result
+    except TokenLimitReached:
+        if not auto_fallback:
+            raise
+        fallback_reason = "token_limit"
+    except httpx.TimeoutException:
+        if not auto_fallback:
+            raise
+        fallback_reason = "timeout"
+    except (GroqAPIError, httpx.HTTPError):
+        if not auto_fallback:
+            raise
+        fallback_reason = "api_error"
+    except Exception:
+        if not auto_fallback:
+            raise
+        fallback_reason = "api_error"
+
+    # Any quota, API, timeout or connection problem can use the local model.
+    try:
+        result = await ollama_chat(messages, max_tokens, json_mode, ollama_model, ollama_timeout)
+        result["fallback_used"] = True
+        result["fallback_reason"] = fallback_reason
+        return result
+    except Exception as fallback_error:
+        raise RuntimeError("GroqCloud failed and the configured local model is unavailable.") from fallback_error
+
+
+async def connectivity():
+    primary = {"connected": False, "configured": bool(settings.GROQ_API_KEY), "model": settings.GROQ_MODEL, "models": []}
+    if settings.GROQ_API_KEY:
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                response = await client.get(f"{settings.GROQ_BASE_URL.rstrip('/')}/models", headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"})
+                primary["connected"] = response.is_success
+                if response.is_success:
+                    primary["models"] = [item.get("id") for item in response.json().get("data", []) if item.get("id")]
+        except httpx.HTTPError:
+            pass
+    fallback = {"connected": False, "models": []}
+    try:
+        async with httpx.AsyncClient(timeout=3) as client:
+            response = await client.get(f"{settings.OLLAMA_BASE_URL.rstrip('/')}/api/tags")
+            if response.is_success:
+                fallback["models"] = [model.get("name") for model in response.json().get("models", [])]
+                fallback["connected"] = bool(fallback["models"])
+    except httpx.HTTPError:
+        pass
+    if settings.GROQ_MODEL not in primary["models"]:
+        primary["models"].append(settings.GROQ_MODEL)
+    return {"primary": primary, "fallback": fallback, "active": "groq" if primary["connected"] else ("ollama" if fallback["connected"] else "none")}
