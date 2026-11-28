@@ -9,3 +9,8 @@ export function buildPrescriptionQrValue({ rxNo }) {
 export function buildReportQrValue({ reportNo }) {
   return `cityhospital:report:${reportNo}`;
 }
+
+// NEW: used by the doctor "Patient profile" print so it carries a QR like the other documents.
+export function buildPatientQrValue({ patientId }) {
+  return `cityhospital:patient:${patientId}`;
+}

@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import Alert from "../../components/common/Alert.jsx";
 import Avatar from "../../components/common/Avatar.jsx";
+import Badge from "../../components/common/Badge.jsx";
 import Button from "../../components/common/Button.jsx";
 import Card from "../../components/common/Card.jsx";
 import Modal from "../../components/common/Modal.jsx";
@@ -121,6 +122,31 @@ export default function DoctorPatientProfile() {
             })}</div> : <p className="text-ink-muted">{t("doctor.profile.noAppointments")}</p>}
           </Card>
         </div>
+
+        {Array.isArray(patient.followups) && (
+          <Card className="mt-5 min-w-0 p-5">
+            <h2 className="mb-3 text-xl font-black">{t("doctor.followupHistory.title")}</h2>
+            {patient.followups.length ? <ul className="divide-y divide-line">{patient.followups.map((f) => {
+              const isRec = f.kind === "recommendation";
+              const when = (iso) => <span dir="ltr">{formatShort(iso, lang, hospital?.timezone)}</span>;
+              return <li key={`${f.kind}-${f.id}`} className="min-w-0 py-3">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <b>{t(isRec ? "doctor.followupHistory.recommendation" : "doctor.followupHistory.appointment")}</b>
+                  {isRec && <Badge tone={f.status === "accepted" ? "success" : f.status === "pending" ? "warning" : f.status === "declined" ? "danger" : "neutral"}>{t(`doctor.followup.status.${f.status}`)}</Badge>}
+                  <Badge tone="neutral">{t(`doctor.followupHistory.sources.${f.booking_source}`)}</Badge>
+                </div>
+                <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                  <div><dt className="inline text-ink-muted">{t("doctor.followupHistory.doctor")}: </dt><dd className="inline">{f.doctor_name}</dd></div>
+                  <div><dt className="inline text-ink-muted">{t("doctor.followupHistory.originalVisit")}: </dt><dd className="inline">{f.source_starts_at ? <>{f.source_booking_no} · {when(f.source_starts_at)}</> : "—"}</dd></div>
+                  <div><dt className="inline text-ink-muted">{t(isRec ? "doctor.followupHistory.recommendedOn" : "doctor.followupHistory.bookedOn")}: </dt><dd className="inline">{when(f.created_at)}</dd></div>
+                  {isRec && <div><dt className="inline text-ink-muted">{t("doctor.followupHistory.suggested")}: </dt><dd className="inline">{when(f.suggested_starts_at)}</dd></div>}
+                  <div><dt className="inline text-ink-muted">{t("doctor.followupHistory.actual")}: </dt><dd className="inline">{f.appointment_id ? <>{when(f.appointment_starts_at)} · {t(`doctor.followupHistory.apptStatus.${f.appointment_status}`)}</> : t("doctor.followupHistory.notBooked")}</dd></div>
+                </dl>
+                {f.note && <p className="mt-1 text-sm text-ink-muted" dir="auto">{f.note}</p>}
+              </li>;
+            })}</ul> : <p className="text-ink-muted">{t("doctor.followupHistory.none")}</p>}
+          </Card>
+        )}
       </>}
     </LoadState>}
 

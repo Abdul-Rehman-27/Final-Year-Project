@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, JSON, LargeBinary, String, Text, UniqueConstraint, false, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.session import Base
@@ -16,6 +16,14 @@ class PortalHospitalSettings(Base):
     open_hours: Mapped[str] = mapped_column(String(100), default="Open 24 hours")
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Karachi")
     grace_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    emergency_number: Mapped[str] = mapped_column(String(50), default="")
+    # Structured operating hours (same window every day). open_hours above stays as the derived display text.
+    open_24h: Mapped[bool] = mapped_column(Boolean, default=True)
+    opens_at: Mapped[str | None] = mapped_column(String(5), nullable=True)      # "HH:MM" hospital local
+    closes_at: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    # Optional lab/radiology override; both NULL = lab follows hospital hours.
+    lab_opens_at: Mapped[str | None] = mapped_column(String(5), nullable=True)
+    lab_closes_at: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
 
 class PortalAppointment(Base):
@@ -36,9 +44,24 @@ class PortalAppointment(Base):
     source: Mapped[str] = mapped_column(String(40), default="portal")
     room_label: Mapped[str] = mapped_column(String(80), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    # Visit length chosen from the session's slot size when booked; NULL on legacy rows (derived from the schedule).
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Doctor-initiated cancellation record (mandatory reason).
+    cancel_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cancelled_by_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    cancelled_by_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Follow-ups (P5d): flagged + optional link to the earlier visit; doctor-direct ones record who/consent/when.
+    is_followup: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    followup_of_appointment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by_doctor_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    patient_agreed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     __table_args__ = (
         UniqueConstraint("doctor_id", "token_date", "token_no", name="uq_portal_doctor_token"),
         Index("ix_portal_appointment_doctor_starts", "doctor_id", "starts_at"),
+        Index("uq_portal_active_slot", "doctor_id", "starts_at", unique=True,
+              postgresql_where=text("status IN ('pending','confirmed')"), sqlite_where=text("status IN ('pending','confirmed')")),
         Index("uq_portal_one_in_progress", "doctor_id", unique=True,
               postgresql_where=text("visit_status = 'in_progress'"), sqlite_where=text("visit_status = 'in_progress'")),
     )
@@ -53,6 +76,75 @@ class PortalDoctorSchedule(Base):
     end_time: Mapped[str | None] = mapped_column(String(5))
     slot_minutes: Mapped[int] = mapped_column(Integer, default=15)
     room_label: Mapped[str] = mapped_column(String(40), default="")
+    # NULL = legacy single-window row (start/end/slot/room above). A list (possibly empty) = authoritative sessions:
+    # [{"start_time","end_time","slot_minutes","room_label"}]. breaks: [{"start_time","end_time"}] (each inside a session).
+    sessions_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    breaks_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+
+
+class PortalScheduleException(Base):
+    """Date-specific override of the weekly template. One row per doctor per date.
+    kind: leave (no slots) | custom_hours (replaces the template for that date) | extra_session (adds to the template)."""
+    __tablename__ = "portal_schedule_exceptions"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    day: Mapped[date] = mapped_column(Date)
+    kind: Mapped[str] = mapped_column(String(20))
+    sessions_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    breaks_json: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    note: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    __table_args__ = (UniqueConstraint("doctor_id", "day", name="uq_portal_exception_doctor_day"),)
+
+
+class PortalRescheduleProposal(Base):
+    """Doctor-proposed move of an appointment. The appointment changes ONLY when the patient accepts.
+    status: pending | accepted | declined | withdrawn | superseded."""
+    __tablename__ = "portal_reschedule_proposals"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    appointment_id: Mapped[int] = mapped_column(ForeignKey("portal_appointments.id"), index=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    original_starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    proposed_starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    room_label: Mapped[str] = mapped_column(String(80), default="")
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    response_note: Mapped[str] = mapped_column(String(300), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PortalFollowupRecommendation(Base):
+    """Doctor's follow-up recommendation (exact date+time). It is NOT an appointment until the patient accepts.
+    status: pending | accepted | declined | withdrawn | superseded | expired."""
+    __tablename__ = "portal_followup_recommendations"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_appointment_id: Mapped[int] = mapped_column(ForeignKey("portal_appointments.id"), index=True)
+    doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    proposed_starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    room_label: Mapped[str] = mapped_column(String(80), default="")
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    note: Mapped[str] = mapped_column(String(300), default="")
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    response_note: Mapped[str] = mapped_column(String(300), default="")
+    resulting_appointment_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PortalNotification(Base):
+    """In-app notification (bell). `kind` + `data` let the UI localise; `message` is the English fallback text."""
+    __tablename__ = "portal_notifications"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(50))
+    message: Mapped[str] = mapped_column(Text, default="")
+    data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class PortalPrescription(Base):
@@ -95,7 +187,7 @@ class PortalLabReport(Base):
     test_name: Mapped[str] = mapped_column(String(120))
     kind: Mapped[str] = mapped_column(String(20))
     patient_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    requested_by_doctor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    requested_by_doctor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)  # NULL = booked by the patient
     appointment_id: Mapped[int | None] = mapped_column(ForeignKey("portal_appointments.id"), index=True)
     status: Mapped[str] = mapped_column(String(20), default="requested")
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -105,6 +197,8 @@ class PortalLabReport(Base):
     impression: Mapped[str] = mapped_column(Text, default="")
     comments: Mapped[str] = mapped_column(Text, default="")
     reported_by_name: Mapped[str | None] = mapped_column(String(100))
+    technique: Mapped[str] = mapped_column(Text, default="")
+    performed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # radiology performed / lab sample collected
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
 

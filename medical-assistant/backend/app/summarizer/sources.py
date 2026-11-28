@@ -25,6 +25,7 @@ class CityHospitalSource(RecordSource):
         engine = create_engine(self.url)
         params = {"patient_id": patient_id, "doctor_id": doctor_id, "appointment_id": appointment_id}
         scoped = " AND doctor_id = :doctor_id" if doctor_id is not None else ""
+        prescription_scoped = " AND p.doctor_id = :doctor_id" if doctor_id is not None else ""
         report_scoped = " AND requested_by_doctor_id = :doctor_id" if doctor_id is not None else ""
         with engine.connect() as connection:
             one = lambda sql: connection.execute(text(sql), params).mappings().first()
@@ -36,7 +37,7 @@ class CityHospitalSource(RecordSource):
             appointments = many("SELECT id, starts_at, status, reason, doctor_id FROM portal_appointments WHERE patient_id = :patient_id" + scoped + " ORDER BY starts_at")
             if appointment_id is not None:
                 appointments = [row for row in appointments if str(row["id"]) == str(appointment_id)]
-            prescriptions = many("SELECT p.id, p.issued_on, p.status, p.instructions, i.medicine, i.dosage, i.timing FROM portal_prescriptions p JOIN portal_prescription_items i ON i.prescription_id = p.id WHERE p.patient_id = :patient_id" + scoped.replace("doctor_id", "p.doctor_id") + " ORDER BY p.issued_on, i.position")
+            prescriptions = many("SELECT p.id, p.issued_on, p.status, p.instructions, i.medicine, i.dosage, i.timing FROM portal_prescriptions p JOIN portal_prescription_items i ON i.prescription_id = p.id WHERE p.patient_id = :patient_id" + prescription_scoped + " ORDER BY p.issued_on, i.position")
             reports = many("SELECT id, test_name, kind, scheduled_for, results, findings, impression, status FROM portal_lab_reports WHERE patient_id = :patient_id AND status = 'ready'" + report_scoped + " ORDER BY scheduled_for")
             files = many("SELECT f.name, f.content_type, f.data FROM portal_lab_report_files f JOIN portal_lab_reports r ON r.id = f.report_id WHERE r.patient_id = :patient_id AND r.status = 'ready'" + report_scoped)
             try:

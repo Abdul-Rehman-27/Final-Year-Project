@@ -10,6 +10,7 @@ import ConfirmDialog from "../../components/common/ConfirmDialog.jsx";
 import InfoGrid from "../../components/common/InfoGrid.jsx";
 import PageHeader from "../../components/common/PageHeader.jsx";
 import { Status, errorText, LoadState, useRequest } from "../../components/doctor/DoctorCommon.jsx";
+import FollowupPanel from "../../components/doctor/FollowupPanel.jsx";
 import VisitStatusSelect from "../../components/doctor/VisitStatusSelect.jsx";
 import { useDoctorContext } from "../../context/DoctorContext.jsx";
 import { useLanguage } from "../../context/LanguageContext.jsx";
@@ -186,6 +187,10 @@ export default function DoctorAppointment() {
           )}
         </div>
       </Card>
+
+      {import.meta.env.VITE_DOCTOR_API_MODE === "live" && ["confirmed", "completed"].includes(appointment.status) && (
+        <FollowupPanel appointment={appointment} timezone={hospital.timezone} />
+      )}
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="p-5">

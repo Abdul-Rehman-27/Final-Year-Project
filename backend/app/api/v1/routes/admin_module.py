@@ -14,7 +14,8 @@ from app.core.security import hash_password
 from app.db.session import get_db
 from app.models.admin import AdminDepartment, AdminPermission, AdminRole, AdminStaffProfile, admin_role_permissions
 from app.models.user import User
-from app.schemas.admin import DepartmentIn, PermissionIn, RoleIn, RolePermissionsIn, StaffIn
+from app.models.portal import PortalHospitalSettings
+from app.schemas.admin import DepartmentIn, HospitalProfileIn, PermissionIn, RoleIn, RolePermissionsIn, StaffIn
 from app.services.chatbot_admin import write_audit
 
 router = APIRouter(prefix="/admin", tags=["admin module"], dependencies=[Depends(require_roles("admin"))])
@@ -365,3 +366,41 @@ def delete_permission(permission_id: int, user: User = Depends(require_roles("ad
     write_audit(db, user.id, "permission_deleted", f"permission:{row.id}", old, {})
     db.delete(row)
     db.commit()
+
+
+# ---------- Hospital Profile (read by patient + doctor portals) ----------
+def hours_text(open_24h: bool, opens_at: str | None, closes_at: str | None) -> str:
+    return "Open 24 hours" if open_24h else f"{opens_at} \u2013 {closes_at}"
+
+
+def _hospital_data(row: PortalHospitalSettings) -> dict:
+    return {"name": row.name, "address": row.address or "", "phone": row.phone or "", "email": row.email or "",
+            "emergencyNumber": row.emergency_number or "", "open24Hours": bool(row.open_24h), "opensAt": row.opens_at,
+            "closesAt": row.closes_at, "labOpensAt": row.lab_opens_at, "labClosesAt": row.lab_closes_at, "openHours": row.open_hours}
+
+
+@router.get("/hospital-profile")
+def get_hospital_profile(user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    return _hospital_data(db.get(PortalHospitalSettings, 1) or PortalHospitalSettings(id=1, open_24h=True))
+
+
+@router.put("/hospital-profile")
+def update_hospital_profile(payload: HospitalProfileIn, user: User = Depends(require_roles("admin")), db: Session = Depends(get_db)):
+    row = db.get(PortalHospitalSettings, 1)
+    if row is None:
+        row = PortalHospitalSettings(id=1, open_24h=True)
+        db.add(row)
+        db.flush()
+    old = _hospital_data(row)
+    row.name, row.address, row.phone, row.email, row.emergency_number = payload.name, payload.address, payload.phone, payload.email, payload.emergency_number
+    row.open_24h = payload.open_24_hours
+    row.opens_at = None if payload.open_24_hours else payload.opens_at
+    row.closes_at = None if payload.open_24_hours else payload.closes_at
+    row.lab_opens_at, row.lab_closes_at = payload.lab_opens_at, payload.lab_closes_at
+    row.open_hours = hours_text(row.open_24h, row.opens_at, row.closes_at)
+    new = _hospital_data(row)
+    if new != old:
+        write_audit(db, user.id, "hospital_profile_updated", "hospital:1", old, new)
+    db.commit()
+    db.refresh(row)
+    return _hospital_data(row)

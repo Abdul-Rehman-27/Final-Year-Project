@@ -29,6 +29,8 @@ class ChatMessage(Base):
     role: Mapped[str] = mapped_column(String(20))
     content: Mapped[str] = mapped_column(Text)
     structured: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # NEW: text of the earlier assistant message this patient message replies to.
+    reply_to: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

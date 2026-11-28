@@ -70,6 +70,8 @@ def _initialize_postgres():
         "ALTER TABLE summaries ADD COLUMN IF NOT EXISTS source_hash TEXT",
         "ALTER TABLE summaries ADD COLUMN IF NOT EXISTS metadata TEXT NOT NULL DEFAULT '{}'",
         "ALTER TABLE messages ADD COLUMN IF NOT EXISTS structured TEXT",
+        # NEW: the earlier assistant message a patient message replies to (shown as a faded chip).
+        "ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to TEXT",
     ]
     with connect() as connection:
         connection.execute("SET TIME ZONE 'UTC'")
@@ -97,6 +99,11 @@ def initialize():
         # Older SQLite databases do not have this column yet, so add it once.
         try:
             db.execute("ALTER TABLE messages ADD COLUMN structured TEXT")
+        except sqlite3.OperationalError:
+            pass
+        # NEW: the earlier assistant message a patient message replies to (shown as a faded chip).
+        try:
+            db.execute("ALTER TABLE messages ADD COLUMN reply_to TEXT")
         except sqlite3.OperationalError:
             pass
         for statement in ("ALTER TABLE summaries ADD COLUMN source_hash TEXT", "ALTER TABLE summaries ADD COLUMN metadata TEXT NOT NULL DEFAULT '{}'"):

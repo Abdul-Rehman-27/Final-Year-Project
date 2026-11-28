@@ -1,7 +1,8 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { useLanguage } from "../../context/LanguageContext.jsx";
-import { PATIENT } from "../../data/mockPatient.js";
+import { useAsync } from "../../hooks/useAsync.js";
+import { patientPortalService } from "../../services/patientPortalService.js";
 import Avatar from "../common/Avatar.jsx";
 import PatientLogo from "./PatientLogo.jsx";
 
@@ -31,8 +32,9 @@ export default function PatientSidebar({ items, onNavigate }) {
   const { t } = useLanguage();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const name = user?.full_name || PATIENT.name;
-  const age = patientAge(user?.date_of_birth);
+  const { data: profile } = useAsync(() => patientPortalService.getProfile(), []);
+  const name = profile?.full_name || user?.full_name || "";
+  const age = profile?.age ?? patientAge(user?.date_of_birth);
 
   return (
     <nav className="flex h-full flex-col gap-1 px-4 py-6" aria-label="Patient portal">

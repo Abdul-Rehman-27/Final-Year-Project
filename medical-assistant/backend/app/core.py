@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = ""
     MEDICAL_ASSISTANT_DATABASE_URL: str = ""
     SUMMARIZER_DATABASE_URL: str = ""
+    # NEW (step 3): CityHospital database for doctors / slots / hospital info (read-only). Falls back to the summariser URLs.
+    HOSPITAL_DATABASE_URL: str = ""
     RECORD_SOURCE: str = "cityhospital"
     SUMMARIZER_MAX_CONTEXT_CHARS: int = 60000
     SUMMARIZER_REQUEST_TIMEOUT: int = 120

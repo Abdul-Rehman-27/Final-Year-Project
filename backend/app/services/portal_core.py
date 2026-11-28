@@ -16,10 +16,16 @@ def age_on(dob, today=None):
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 def assign_token(db, appointment):
-    day = local_day(appointment.starts_at)
+    """token_no = first letter of the doctor's department (A fallback) + '-' + 2-digit per-doctor/day sequence."""
+    from app.models.admin import AdminDepartment, AdminStaffProfile
     from app.models.portal import PortalAppointment
-    count = db.scalar(select(PortalAppointment).where(PortalAppointment.doctor_id == appointment.doctor_id, PortalAppointment.token_date == day).with_only_columns(__import__('sqlalchemy').func.count())) or 0
-    appointment.token_date, appointment.token_no = day, f"A-{count + 1:02d}"
+    day = local_day(appointment.starts_at)
+    staff = db.get(AdminStaffProfile, appointment.doctor_id)
+    dep = db.get(AdminDepartment, staff.department_id) if staff and staff.department_id else None
+    letter = (dep.name.strip()[:1].upper() if dep and dep.name.strip() else "") or "A"
+    used = db.scalars(select(PortalAppointment.token_no).where(PortalAppointment.doctor_id == appointment.doctor_id, PortalAppointment.token_date == day, PortalAppointment.token_no.is_not(None))).all()
+    seq = max((int(t.split("-")[1]) for t in used if "-" in t and t.split("-")[1].isdigit()), default=0) + 1
+    appointment.token_date, appointment.token_no = day, f"{letter}-{seq:02d}"
 
 def build_queue(appointments, now, grace_minutes):
     now = as_utc(now); rows = []

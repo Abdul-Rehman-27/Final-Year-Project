@@ -16,6 +16,11 @@ from app.db.migrations.v002_role_scoped_user_email import upgrade as migrate_rol
 from app.db.migrations.v003_evaluation_progress import upgrade as migrate_evaluation_progress
 from app.db.migrations.v004_admin_module import upgrade as migrate_admin_module
 from app.db.migrations.v005_doctor_portal import upgrade as migrate_doctor_portal
+from app.db.migrations.v006_patient_portal import upgrade as migrate_patient_portal
+from app.db.migrations.v007_hospital_profile import upgrade as migrate_hospital_profile
+from app.db.migrations.v008_doctor_availability import upgrade as migrate_doctor_availability
+from app.db.migrations.v009_followups import upgrade as migrate_followups
+from app.db.migrations.v010_chat_reply_to import upgrade as migrate_chat_reply_to
 from app.models.user import User
 from app.core.security import decode_access_token
 from app.services.admin_health import monitor_services
@@ -31,6 +36,11 @@ async def lifespan(app: FastAPI):
     migrate_evaluation_progress(engine)
     migrate_admin_module(engine)
     migrate_doctor_portal(engine)
+    migrate_patient_portal(engine)
+    migrate_hospital_profile(engine)
+    migrate_doctor_availability(engine)
+    migrate_followups(engine)
+    migrate_chat_reply_to(engine)
     health_task = asyncio.create_task(monitor_services())
     yield
     health_task.cancel()

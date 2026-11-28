@@ -9,6 +9,17 @@ class CreateConversation(BaseModel):
 
 class SendMessage(BaseModel):
     message: str = Field(min_length=1, max_length=5000)
+    # NEW: the assistant message the patient is replying to (optional).
+    reply_to: str | None = Field(default=None, max_length=300)
+
+
+class ActionResultIn(BaseModel):
+    """NEW (step 4): the patient's browser reports that the portal carried out (or refused) a chat booking action.
+    Only the appointment id and the error code are accepted: the details shown in the chat are read from the portal database."""
+    action_id: str = Field(min_length=1, max_length=64)
+    ok: bool
+    appointment_id: int | None = None
+    code: str | None = Field(default=None, max_length=64)
 
 
 class ModelSelection(BaseModel):

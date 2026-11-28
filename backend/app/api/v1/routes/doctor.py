@@ -1,7 +1,7 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.admin import AdminDepartment, AdminStaffProfile
 from app.models.portal import (PortalAppointment, PortalDoctorSchedule, PortalHospitalSettings, PortalPrescription, PortalPrescriptionItem, PortalLabTest, PortalLabReport, PortalLabReportFile, PortalClinicalSummary)
 from app.models.user import User
+from app.services import availability as av
 from app.services.portal_core import as_utc, utcnow, local_day, iso, age_on, build_queue, assign_token
 from app.services.medical_assistant_client import summarize_text, MedicalAssistantError
 
@@ -22,19 +23,24 @@ class DoctorRoute(APIRoute):
         async def wrapped(request: Request):
             try: return await handler(request)
             except RequestValidationError:
-                return JSONResponse(status_code=422, content={"detail": "SCHEDULE_INVALID" if request.url.path.endswith("/schedule") and request.method == "PUT" else "VALIDATION_ERROR"})
+                return JSONResponse(status_code=422, content={"detail": "SCHEDULE_INVALID" if "/schedule" in request.url.path and request.method in ("PUT", "POST") else "VALIDATION_ERROR"})
         return wrapped
 
 router = APIRouter(prefix="/doctor", tags=["doctor portal"], dependencies=[Depends(require_roles("doctor"))], route_class=DoctorRoute)
 
 def fail(status, code): raise HTTPException(status_code=status, detail=code)
 
-def schedule_rows(db, doctor_id):
-    saved = {x.weekday: x for x in db.scalars(select(PortalDoctorSchedule).where(PortalDoctorSchedule.doctor_id == doctor_id)).all()}
-    return [{"weekday": i, "is_active": bool(saved[i].is_active) if i in saved else False, "start_time": saved[i].start_time if i in saved else None, "end_time": saved[i].end_time if i in saved else None, "slot_minutes": saved[i].slot_minutes if i in saved else 15, "room_label": saved[i].room_label if i in saved else ""} for i in range(7)]
+def schedule_rows(db, doctor_id): return av.template_rows(db, doctor_id)
 
 def patient(db, patient_id): return db.get(User, patient_id)
-def related(db, doctor_id, patient_id): return db.scalar(select(PortalAppointment.id).where(PortalAppointment.doctor_id==doctor_id, PortalAppointment.patient_id==patient_id, PortalAppointment.status.in_(("confirmed","completed")).limit(1))) is not None
+def dept_name(db, doctor_id):
+    staff = db.get(AdminStaffProfile, doctor_id)
+    dep = db.get(AdminDepartment, staff.department_id) if staff and staff.department_id else None
+    return dep.name if dep else None
+def followup_history(db, patient_id):
+    from app.services import followups as fu  # local import: followups imports this module's helpers
+    return fu.history(db, patient_id)
+def related(db, doctor_id, patient_id): return db.scalar(select(PortalAppointment.id).where(PortalAppointment.doctor_id==doctor_id, PortalAppointment.patient_id==patient_id, PortalAppointment.status.in_(("confirmed","completed"))).limit(1)) is not None
 def effective_rx(rx):
     from datetime import timedelta
     return "completed" if rx.status == "active" and local_day(utcnow()) > rx.issued_on + timedelta(days=rx.duration_days) else rx.status
@@ -43,7 +49,7 @@ def rx_brief(db, rx):
     return {"id":rx.id,"rx_no":rx.rx_no,"patient_id":rx.patient_id,"patient_name":p.full_name,"issued_on":rx.issued_on.isoformat(),"duration_days":rx.duration_days,"status":effective_rx(rx),"items":[{"medicine":x.medicine,"dosage":x.dosage,"timing":x.timing} for x in items],"instructions":rx.instructions}
 def appointment_ar(db,a,entry=None):
     p=patient(db,a.patient_id); state=entry["state"] if entry else "none"
-    return {"id":a.id,"starts_at":iso(a.starts_at),"patient_id":a.patient_id,"patient_name":p.full_name,"patient_age":age_on(p.date_of_birth),"reason":a.reason,"status":a.status,"visit_status":a.visit_status,"queue_state":state,"token_no":a.token_no}
+    return {"id":a.id,"starts_at":iso(a.starts_at),"patient_id":a.patient_id,"patient_name":p.full_name,"patient_age":age_on(p.date_of_birth),"reason":a.reason,"status":a.status,"visit_status":a.visit_status,"queue_state":state,"token_no":a.token_no,"is_followup":bool(a.is_followup),"followup_of_appointment_id":a.followup_of_appointment_id}
 def today_entries(db, doctor_id):
     now=utcnow(); rows=[a for a in db.scalars(select(PortalAppointment).where(PortalAppointment.doctor_id==doctor_id,PortalAppointment.status.in_(("confirmed","completed")))).all() if local_day(a.starts_at)==local_day(now)]
     grace=(db.get(PortalHospitalSettings,1) or PortalHospitalSettings()).grace_minutes
@@ -85,25 +91,37 @@ def get_schedule(db: Session = Depends(get_db), user: User = Depends(get_current
 
 @router.put("/schedule")
 async def put_schedule(request: Request, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    """Replace the weekly template. Each day may carry `sessions` (+ `breaks`); a legacy item without `sessions` that matches the
+    stored first session keeps the day as it is, a changed legacy item replaces the day with that single session.
+    A change that would leave a future appointment outside the new hours is refused: 409 SCHEDULE_CONFLICT + the appointments."""
     try: body = await request.json(); days = body["days"]
     except Exception: fail(422, "SCHEDULE_INVALID")
     if not isinstance(days, list) or len(days) != 7: fail(422, "SCHEDULE_INVALID")
-    seen = set(); cleaned = []
+    old = av.load(db, user.id); seen = set(); templates = {}
     for item in days:
         if not isinstance(item, dict) or type(item.get("weekday")) is not int or item["weekday"] not in range(7) or item["weekday"] in seen or type(item.get("is_active")) is not bool:
             fail(422, "SCHEDULE_INVALID")
-        seen.add(item["weekday"])
-        if not item["is_active"]: cleaned.append((item["weekday"], False, None, None, 15, "")); continue
-        start, end, slot, room = item.get("start_time"), item.get("end_time"), item.get("slot_minutes"), item.get("room_label")
-        if not isinstance(start, str) or not isinstance(end, str) or not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", start) or not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", end) or slot not in (15,30,45) or not isinstance(room, str) or len(room) > 40:
-            fail(422, "SCHEDULE_INVALID")
-        mins = lambda x: int(x[:2])*60+int(x[3:])
-        if mins(start) >= mins(end) or mins(end)-mins(start) < slot: fail(422, "SCHEDULE_INVALID")
-        cleaned.append((item["weekday"], True, start, end, slot, room))
-    for weekday, active, start, end, slot, room in cleaned:
-        row = db.get(PortalDoctorSchedule, {"doctor_id": user.id, "weekday": weekday})
-        if not row: row = PortalDoctorSchedule(doctor_id=user.id, weekday=weekday); db.add(row)
-        row.is_active, row.start_time, row.end_time, row.slot_minutes, row.room_label = active, start, end, slot, room
+        wd = item["weekday"]; seen.add(wd)
+        if not item["is_active"]: templates[wd] = ([], []); continue
+        try:
+            if "sessions" in item:
+                sessions = av.clean_sessions(item["sessions"]); breaks = av.clean_breaks(item.get("breaks"), sessions)
+            else:
+                if not isinstance(item.get("room_label"), str): fail(422, "SCHEDULE_INVALID")
+                legacy = av.clean_sessions([{k: item.get(k) for k in ("start_time", "end_time", "slot_minutes", "room_label")}])
+                stored_s, stored_b = old.templates.get(wd, ([], []))
+                sessions, breaks = (stored_s, stored_b) if stored_s and stored_s[0] == legacy[0] else (legacy, [])
+        except av.ScheduleInvalid: fail(422, "SCHEDULE_INVALID")
+        templates[wd] = (sessions, breaks)
+    bad = av.newly_invalidated(db, user.id, old, av.with_templates(old, templates))
+    if bad: return JSONResponse(status_code=409, content={"detail": "SCHEDULE_CONFLICT", "appointments": [appointment_ar(db, a) for a in bad]})
+    for wd, (sessions, breaks) in templates.items():
+        row = db.get(PortalDoctorSchedule, {"doctor_id": user.id, "weekday": wd})
+        if not row: row = PortalDoctorSchedule(doctor_id=user.id, weekday=wd); db.add(row)
+        first = sessions[0] if sessions else None
+        row.is_active = bool(sessions); row.sessions_json = sessions; row.breaks_json = breaks
+        row.start_time, row.end_time = (first["start_time"], first["end_time"]) if first else (None, None)
+        row.slot_minutes, row.room_label = (first["slot_minutes"], first["room_label"]) if first else (15, "")
     db.commit()
     return {"days": schedule_rows(db, user.id)}
 
@@ -186,8 +204,12 @@ async def create_rx(appointment_id:int,request:Request,db:Session=Depends(get_db
     for i,(m,d,t) in enumerate(clean):db.add(PortalPrescriptionItem(prescription_id=rx.id,position=i,medicine=m,dosage=d,timing=t))
     db.commit();return rx_detail(db,rx)
 @router.get("/prescriptions")
-def list_rx(q:str="",from_:str|None=None,to:str|None=None,limit:int=25,offset:int=0,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
+def list_rx(q:str="",from_:str|None=Query(None,alias="from"),to:str|None=None,limit:int=25,offset:int=0,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     rows=db.scalars(select(PortalPrescription).where(PortalPrescription.doctor_id==user.id).order_by(PortalPrescription.issued_on.desc(),PortalPrescription.id.desc())).all()
+    try:
+        if from_:rows=[x for x in rows if x.issued_on>=date.fromisoformat(from_)]
+        if to:rows=[x for x in rows if x.issued_on<=date.fromisoformat(to)]
+    except ValueError:fail(422,"VALIDATION_ERROR")
     if q:rows=[x for x in rows if q.lower() in patient(db,x.patient_id).full_name.lower()]
     return {"items":[rx_brief(db,x) for x in rows[offset:offset+min(max(limit,1),100)]],"total":len(rows)}
 @router.get("/prescriptions/{rx_id}")
@@ -209,20 +231,23 @@ def patients(q:str="",limit:int=25,offset:int=0,db:Session=Depends(get_db),user:
 @router.get("/patients/{patient_id}")
 def patient_detail(patient_id:int,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     if not related(db,user.id,patient_id):fail(404,"NOT_FOUND")
-    p=patient(db,patient_id); rxs=[rx_brief(db,x)|{"doctor_name":patient(db,user.id).full_name} for x in db.scalars(select(PortalPrescription).where(PortalPrescription.doctor_id==user.id,PortalPrescription.patient_id==patient_id).order_by(PortalPrescription.id.desc())).all()]; ap=[]
-    for a in db.scalars(select(PortalAppointment).where(PortalAppointment.doctor_id==user.id,PortalAppointment.patient_id==patient_id).order_by(PortalAppointment.starts_at.desc())).all():ap.append({"id":a.id,"starts_at":iso(a.starts_at),"doctor_name":patient(db,user.id).full_name,"department":None,"status":a.status,"visit_status":a.visit_status,"token_no":a.token_no,"booking_no":a.booking_no})
-    return {"id":p.id,"full_name":p.full_name,"age":age_on(p.date_of_birth),"gender":p.gender,"email":p.email,"prescriptions":rxs,"appointments":ap}
+    p=patient(db,patient_id)
+    rxs=[rx_brief(db,x)|{"doctor_name":patient(db,x.doctor_id).full_name} for x in db.scalars(select(PortalPrescription).where(PortalPrescription.patient_id==patient_id).order_by(PortalPrescription.id.desc())).all()]
+    ap=[{"id":a.id,"starts_at":iso(a.starts_at),"doctor_name":patient(db,a.doctor_id).full_name,"department":dept_name(db,a.doctor_id),"status":a.status,"visit_status":a.visit_status,"token_no":a.token_no,"booking_no":a.booking_no}
+        for a in db.scalars(select(PortalAppointment).where(PortalAppointment.patient_id==patient_id).order_by(PortalAppointment.starts_at.desc()).limit(50)).all()]
+    return {"id":p.id,"full_name":p.full_name,"age":age_on(p.date_of_birth),"gender":p.gender,"email":p.email,"prescriptions":rxs,"appointments":ap,"followups":followup_history(db,patient_id)}
 @router.get("/patients/{patient_id}/summary-base")
 def summary_base(patient_id:int,appointment_id:int|None=None,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     if not related(db,user.id,patient_id):fail(404,"NOT_FOUND")
-    ap=db.scalars(select(PortalAppointment).where(PortalAppointment.doctor_id==user.id,PortalAppointment.patient_id==patient_id).order_by(PortalAppointment.starts_at.desc())).all()
-    if appointment_id is not None and not any(a.id==appointment_id for a in ap):fail(404,"NOT_FOUND")
+    if appointment_id is not None and not db.scalar(select(PortalAppointment.id).where(PortalAppointment.id==appointment_id,PortalAppointment.doctor_id==user.id,PortalAppointment.patient_id==patient_id)):fail(404,"NOT_FOUND")
+    ap=db.scalars(select(PortalAppointment).where(PortalAppointment.patient_id==patient_id,PortalAppointment.status.in_(("confirmed","completed"))).order_by(PortalAppointment.starts_at.desc())).all()
     completed=next((a for a in ap if a.status=="completed"),None);p=patient(db,patient_id)
-    return {"snapshot":{"name":p.full_name,"age":age_on(p.date_of_birth),"gender":p.gender,"last_visit":{"starts_at":iso(completed.starts_at),"department":None} if completed else None},"past_appointments":[{"doctor_name":user.full_name,"department":None,"starts_at":iso(a.starts_at),"status":a.status} for a in ap if a.id!=appointment_id][:3]}
+    return {"snapshot":{"name":p.full_name,"age":age_on(p.date_of_birth),"gender":p.gender,"last_visit":{"starts_at":iso(completed.starts_at),"department":dept_name(db,completed.doctor_id)} if completed else None},
+            "past_appointments":[{"doctor_name":patient(db,a.doctor_id).full_name,"department":dept_name(db,a.doctor_id),"starts_at":iso(a.starts_at),"status":a.status} for a in ap if a.id!=appointment_id][:3]}
 @router.get("/lab-tests")
 def lab_tests(db:Session=Depends(get_db),user:User=Depends(get_current_user)):return [{"id":x.id,"name":x.name,"kind":x.kind,"prep_note":x.prep_note} for x in db.scalars(select(PortalLabTest).order_by(PortalLabTest.name)).all()]
 def lab_detail(db,r):
-    d=lab_brief(db,r);d.update({"appointment_id":r.appointment_id,"notes":r.notes,"results":r.results or [],"findings":r.findings,"impression":r.impression,"comments":r.comments,"reported_by_name":r.reported_by_name,"files":[{"id":f.id,"name":f.name,"content_type":f.content_type,"size":f.size} for f in db.scalars(select(PortalLabReportFile).where(PortalLabReportFile.report_id==r.id)).all()]});return d
+    d=lab_brief(db,r);d.update({"appointment_id":r.appointment_id,"notes":r.notes,"results":r.results or [],"findings":r.findings,"impression":r.impression,"comments":r.comments,"reported_by_name":r.reported_by_name,"files":[{"id":f.id,"kind":"pdf" if f.content_type=="application/pdf" else "image","caption":f.name,"content_type":f.content_type,"size":f.size} for f in db.scalars(select(PortalLabReportFile).where(PortalLabReportFile.report_id==r.id)).all()]});return d
 @router.get("/lab-reports")
 def labs(status:str="",limit:int=25,offset:int=0,db:Session=Depends(get_db),user:User=Depends(get_current_user)):
     rows=db.scalars(select(PortalLabReport).where(PortalLabReport.requested_by_doctor_id==user.id).order_by(PortalLabReport.created_at.desc())).all();rows=[x for x in rows if not status or x.status==status];return {"items":[lab_detail(db,x) for x in rows[offset:offset+min(max(limit,1),100)]],"total":len(rows)}

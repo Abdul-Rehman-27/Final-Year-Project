@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import DashboardLayout from "../components/layout/DashboardLayout.jsx";
 import { ADMIN_NAV } from "../config/adminNav.js";
 import AdminDepartments from "../pages/admin/AdminDepartments.jsx";
+import AdminHospitalProfile from "../pages/admin/AdminHospitalProfile.jsx";
 import AdminEvaluation from "../pages/admin/AdminEvaluation.jsx";
 import AdminKnowledgeBase from "../pages/admin/AdminKnowledgeBase.jsx";
 import AdminOverview from "../pages/admin/AdminOverview.jsx";
@@ -17,6 +18,7 @@ import PatientDashboard from "../pages/patient/PatientDashboard.jsx";
 import PatientAppointments from "../pages/patient/PatientAppointments.jsx";
 import PatientPrescriptions from "../pages/patient/PatientPrescriptions.jsx";
 import PatientLabReports from "../pages/patient/PatientLabReports.jsx";
+import PatientReschedule from "../pages/patient/PatientReschedule.jsx";
 import TokenPage from "../pages/patient/print/TokenPage.jsx";
 import PrescriptionPage from "../pages/patient/print/PrescriptionPage.jsx";
 import RadiologyReportPage from "../pages/patient/print/RadiologyReportPage.jsx";
@@ -26,6 +28,7 @@ import ProtectedRoute from "./ProtectedRoute.jsx";
 import DoctorShell from "../components/doctor/DoctorShell.jsx";
 import DoctorDashboard from "../pages/doctor/DoctorDashboard.jsx";
 import DoctorAvailability from "../pages/doctor/DoctorAvailability.jsx";
+import DoctorCalendar from "../pages/doctor/DoctorCalendar.jsx";
 import DoctorQueue from "../pages/doctor/DoctorQueue.jsx";
 import DoctorAppointment from "../pages/doctor/DoctorAppointment.jsx";
 import DoctorSummary from "../pages/doctor/DoctorSummary.jsx";
@@ -49,6 +52,7 @@ export default function AppRoutes() {
       >
         <Route index element={<PatientDashboard />} />
         <Route path="appointments" element={<PatientAppointments />} />
+        <Route path="appointments/:id/edit" element={<PatientReschedule />} />
         <Route path="prescriptions" element={<PatientPrescriptions />} />
         <Route path="lab-reports" element={<PatientLabReports />} />
         <Route path="assistant" element={<PatientChat />} />
@@ -60,6 +64,7 @@ export default function AppRoutes() {
       <Route path="/doctor" element={<ProtectedRoute role="doctor"><DoctorShell /></ProtectedRoute>}>
         <Route index element={<DoctorDashboard />} />
         <Route path="availability" element={<DoctorAvailability />} />
+        <Route path="calendar" element={<DoctorCalendar />} />
         <Route path="queue" element={<DoctorQueue />} />
         <Route path="queue/:appointmentId" element={<DoctorAppointment />} />
         <Route path="queue/:appointmentId/summary" element={<DoctorSummary />} />
@@ -84,6 +89,7 @@ export default function AppRoutes() {
         <Route index element={<AdminOverview />} />
         <Route path="staff" element={<AdminStaff />} />
         <Route path="departments" element={<AdminDepartments />} />
+        <Route path="hospital-profile" element={<AdminHospitalProfile />} />
         <Route path="roles" element={<AdminRoles />} />
         <Route path="permissions" element={<AdminPermissions />} />
         <Route path="evaluation" element={<AdminEvaluation />} />

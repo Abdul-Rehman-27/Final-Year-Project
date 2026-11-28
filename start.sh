@@ -8,25 +8,15 @@ if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-[[ -f backend/.env ]] || cp backend/.env.example backend/.env
-[[ -f medical-assistant/.env ]] || cp medical-assistant/.env.example medical-assistant/.env
+# backend/.env holds the secrets (SECRET_KEY, GROQ_API_KEY, SMTP_*). It is optional for a first run.
 [[ -f .env ]] || cp .env.example .env
 
-dockerhub_user=$(sed -n 's/^DOCKERHUB_USERNAME=//p' .env | tail -n 1)
-dockerhub_repo=$(sed -n 's/^DOCKERHUB_REPOSITORY=//p' .env | tail -n 1)
-if [[ -z "$dockerhub_user" || "$dockerhub_user" == local || -z "$dockerhub_repo" || "$dockerhub_repo" == cityhospital ]]; then
-  echo "One-time setup required: edit .env and set DOCKERHUB_USERNAME and DOCKERHUB_REPOSITORY to the published Docker Hub image namespace and repository name."
-  exit 1
-fi
+echo "Building and starting CityHospital (database, API servers, frontends)..."
+docker compose up -d --build
 
-echo "Pulling the application images..."
-docker compose pull
-echo "Starting CityHospital and its services..."
-docker compose up -d
-
-echo "Waiting for the first startup and Ollama model downloads to finish..."
+echo "Waiting for the first startup to finish..."
 ready=0
-for _ in $(seq 1 3600); do
+for _ in $(seq 1 360); do
   if curl --silent --fail http://localhost:5173/ >/dev/null; then
     ready=1
     break

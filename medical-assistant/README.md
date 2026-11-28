@@ -184,3 +184,26 @@ Clients send the selected key in the `X-API-Key` header. Supported scopes are `c
 - Doctor schedules and appointment bookings are stored in the configured database (SQLite for standalone use or PostgreSQL when configured). A live deployment should use the hospital's authoritative scheduling system so external bookings and availability are reflected.
 - The summarizer UI is a clinician workflow, but this standalone project does not authenticate clinicians. Protect it behind an authenticated host application or gateway before deployment.
 - The assistant provides general information and decision support, not a diagnosis. For an emergency, contact local emergency services.
+
+
+## Reply card and language (step 2)
+- `structured.possible_causes` is now a list of `{name, percent}`. `percent` is the model's rough estimate (0-100, total at most 100, `null` for older saved replies that were plain strings). The embedded chat draws them as bars with a "Rough estimates only" note.
+- The banner shows the level and reason from the model, plus a line the app adds itself: the hospital number (`emergency_number`, else `phone`, read from the portal's `GET /patient/hospital`) and 1122. The model is told never to write phone numbers.
+- Language is detected for every message by word counts (`language_of`): Urdu script, Roman Urdu, English, and for mixed messages whichever style has more words. Only a close call goes to the model (`detect_language`); if the model fails, the word-count result is used.
+
+
+## Hospital connector (step 3)
+- `app/hospital_connector.py` reads doctors, free slots and hospital info from the CityHospital database by SQL (read-only). Set `HOSPITAL_DATABASE_URL` (or `SUMMARIZER_DATABASE_URL`) in `medical-assistant/.env`. Leave it empty to turn the connector off: the old flow is then used unchanged.
+- Slot rules are copied from the portal (`backend/app/services/availability.py`, `patient_portal.py`). Change both places if the portal rules change.
+- Doctor / availability and hospital-info questions return `structured.type` `doctors` or `hospital`; the embedded chat draws them as cards. "Book now" and slot chips are disabled unless the portal bridge is on (step 4).
+- The assistant's own local booking (`/integrations/doctors`, "yes" to confirm) is unchanged.
+
+## Book / change / cancel in the chat (step 4)
+The portal does every real write; the assistant only talks and relays.
+1. The patient types a request. Booking needs a doctor NAME (e.g. "Book Dr. Sana Malik on 2026-11-30 at 10:30", or tap a slot chip, which sends exactly that sentence). A specialty alone still shows doctor cards. "Cancel my appointment" / "reschedule my appointment" list the patient's own editable appointments and ask which one (reschedule keeps the same doctor).
+2. The chat shows doctor, date, time and asks yes / no. Nothing is sent anywhere before "yes".
+3. "yes" returns `structured.type = "portal_action"` with `action_id`, `action` (`book` | `reschedule` | `cancel`) and `params` (doctor / appointment id, date, time only). The embedded chat page asks the portal page (`postMessage`, origin + source checked both ways), the portal page calls its own `/patient/appointments` endpoints with the signed-in session (so the hospital backend applies every rule: 30-day window, max 3 upcoming, slot recheck, overlap, ownership, token), then the chat reports the outcome to `POST /chat/sessions/{id}/action-result` (through the portal, which reads the appointment from its own database).
+4. The reply shows the portal's own appointment (doctor, date, time, room, token, booking no). If the portal refuses, the real code (e.g. `SLOT_UNAVAILABLE`) is shown with a readable reason and, for a taken slot, free times to choose from.
+- On: messages that come through the portal proxy carry `portal_bridge: true` and `HOSPITAL_DATABASE_URL` is set. Off (standalone page, no connection): the old flow, including the local test booking, is unchanged. While on, the local test booking is not offered.
+- Safety: an `action_id` can be answered once; unknown ids get 409; the assistant never sees or chooses a patient id for a write; a conversation re-opened from history never re-sends an action; if the portal does not answer within 30 s the chat says to check "My appointments" before trying again.
+- Urdu / Roman Urdu wording in `app/portal_flow.py` (`TEXT`) is a draft: please have a native speaker review it.

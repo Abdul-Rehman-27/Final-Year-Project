@@ -7,7 +7,7 @@ import Sidebar from "./Sidebar.jsx";
  * Shared shell for every role's dashboard: sidebar + language switch + page content.
  * Pass the role's menu as `navItems`; child routes render inside <Outlet />.
  */
-export default function DashboardLayout({ navItems, variant, portalLabel, userCard }) {
+export default function DashboardLayout({ navItems, variant, portalLabel, userCard, topRight = null }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
@@ -39,8 +39,12 @@ export default function DashboardLayout({ navItems, variant, portalLabel, userCa
               <path d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
-          <LanguageSwitch />
+          <div className="flex items-center gap-2">
+            {topRight && <div className="lg:hidden">{topRight}</div>}
+            <LanguageSwitch />
+          </div>
         </div>
+        {topRight && <div className="hidden justify-end px-8 pt-4 lg:flex">{topRight}</div>}
 
         <main className="px-4 pb-10 sm:px-8">
           <Outlet />

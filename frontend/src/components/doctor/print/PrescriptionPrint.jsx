@@ -1,6 +1,8 @@
+import { QRCodeSVG } from "qrcode.react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import css from "./doctor-print.css?inline";
+import { buildPrescriptionQrValue } from "../../../utils/qr.js";
 import { openPrintWindow } from "./printWindow.js";
 
 function issuedDate(value, timezone) {
@@ -83,7 +85,12 @@ function PrescriptionDocument({ detail, hospital, draft }) {
       <h2 className="print-section">INSTRUCTIONS</h2>
       <p className="print-instructions" dir="auto">{detail.instructions || "—"}</p>
       <div className="print-sign">
-        <div className="print-qr">QR</div>
+        {/* CHANGED: real QR (same value format as the patient portal prescription). Drafts have no Rx number yet. */}
+        <div className="print-qr">
+          {draft
+            ? <span className="print-qr-draft">DRAFT<br />no QR</span>
+            : <QRCodeSVG value={buildPrescriptionQrValue({ rxNo: detail.rx_no })} size={96} level="M" fgColor="#0F2A27" bgColor="#FFFFFF" marginSize={4} role="img" aria-label={`Prescription ${detail.rx_no}`} />}
+        </div>
         <div className="print-signature">
           <small>Doctor&apos;s signature &amp; stamp</small>
           <br /><b dir="auto">{doctorNameLabel(doctor.name)}</b>

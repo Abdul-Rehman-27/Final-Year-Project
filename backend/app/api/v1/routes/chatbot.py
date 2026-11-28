@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_roles
 from app.db.session import get_db
+from app.models.portal import PortalAppointment
 from app.models.chatbot import ChatConversation, ChatMessage, ModelConfig, ModelUsage
 from app.models.user import User
-from app.schemas.chatbot import CreateConversation, ModelSelection, SendMessage
+from app.schemas.chatbot import ActionResultIn, CreateConversation, ModelSelection, SendMessage
 from app.services.medical_assistant_client import MedicalAssistantError, request
 from app.services.chatbot_admin import build_initial_state, get_model_config, provider_health, write_audit
 from app.services.websocket_manager import manager
@@ -121,7 +122,8 @@ async def send_chat_message(
         raise HTTPException(404, "Conversation not found")
     config = _model_config(db)
     started = datetime.now(timezone.utc)
-    db.add(ChatMessage(conversation_id=conversation.id, role="user", content=payload.message.strip()))
+    reply_to = (payload.reply_to or "").strip() or None
+    db.add(ChatMessage(conversation_id=conversation.id, role="user", content=payload.message.strip(), reply_to=reply_to))
     if not config.medical_assistant_enabled:
         await _record_blocked_query(db, user, conversation, config.primary_provider, "", "service_disabled")
         raise HTTPException(503, "The Medical Assistant service is disabled by an administrator.")
@@ -157,6 +159,8 @@ async def send_chat_message(
             json={
                 "patient_id": str(user.id),
                 "message": payload.message,
+                "reply_to": reply_to,
+                "portal_bridge": True,   # NEW (step 4): this chat lives inside the portal, which can carry out a confirmed booking
                 "provider": request_provider,
                 "groq_model": request_model if request_provider == "groq" else config.groq_model,
                 "ollama_model": config.fallback_model if request_provider == "groq" else request_model,
@@ -218,6 +222,37 @@ async def send_chat_message(
         fallback_event = {"reason": fallback_reason or "api_error", "at": config.last_fallback_at.isoformat() if config.last_fallback_at else datetime.now(timezone.utc).isoformat(), "active_model": state["active_model"], "usage": state["usage"]}
         await manager.broadcast("fallback_triggered", fallback_event)
         await manager.broadcast("model_changed", {"active_model": state["active_model"], "config": state["config"]})
+    return result
+
+
+@router.post("/chat/sessions/{conversation_id}/action-result")
+async def chat_action_result(
+    conversation_id: int,
+    payload: ActionResultIn,
+    user: User = Depends(require_roles("patient")),
+    db: Session = Depends(get_db),
+):
+    """NEW (step 4): relay the outcome of a booking / reschedule / cancel the portal just carried out for this patient.
+    The appointment shown in the chat (including its token) is read from the portal's own record of the signed-in patient,
+    not taken from the browser."""
+    conversation = db.scalar(select(ChatConversation).where(ChatConversation.id == conversation_id, ChatConversation.patient_id == user.id))
+    if conversation is None:
+        raise HTTPException(404, "Conversation not found")
+    data = None
+    if payload.ok:
+        appointment = db.get(PortalAppointment, payload.appointment_id) if payload.appointment_id else None
+        if appointment is None or appointment.patient_id != user.id:
+            raise HTTPException(404, "Appointment not found")
+        from app.api.v1.routes.patient import appt_dict
+        data = appt_dict(db, appointment)
+    try:
+        result = await request("POST", f"/api/v1/chat/sessions/{conversation.medical_assistant_id}/action-result",
+                               json={"patient_id": str(user.id), "action_id": payload.action_id, "ok": payload.ok, "data": data, "code": payload.code})
+    except MedicalAssistantError as exc:
+        raise HTTPException(409 if "HTTP 409" in str(exc) else 503, str(exc)) from exc
+    db.add(ChatMessage(conversation_id=conversation.id, role="assistant", content=result.get("answer", ""), structured=result.get("structured")))
+    conversation.updated_at = datetime.now(timezone.utc)
+    db.commit()
     return result
 
 

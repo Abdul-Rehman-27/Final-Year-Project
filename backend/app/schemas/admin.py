@@ -72,3 +72,55 @@ class StaffIn(CamelModel):
             if self.fee is None:
                 raise ValueError("Doctor consultation fee is required")
         return self
+
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+class HospitalProfileIn(CamelModel):
+    name: str = Field(min_length=2, max_length=100)
+    address: str = Field(default="", max_length=255)
+    phone: str = Field(default="", max_length=50)
+    email: str = Field(default="", max_length=255)
+    emergency_number: str = Field(default="", max_length=50)
+    open_24_hours: bool = True
+    opens_at: str | None = None
+    closes_at: str | None = None
+    lab_opens_at: str | None = None
+    lab_closes_at: str | None = None
+
+    @field_validator("phone", "emergency_number")
+    @classmethod
+    def validate_phone_like(cls, value: str) -> str:
+        if value and not re.fullmatch(r"[0-9+()\s-]{3,50}", value):
+            raise ValueError("Enter a valid phone number")
+        return value
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        if value and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", value):
+            raise ValueError("Enter a valid email address")
+        return value.lower()
+
+    @field_validator("opens_at", "closes_at", "lab_opens_at", "lab_closes_at", mode="before")
+    @classmethod
+    def validate_time(cls, value):
+        if value in (None, ""):
+            return None
+        if not isinstance(value, str) or not _HHMM.fullmatch(value):
+            raise ValueError("Time must be HH:MM (24-hour)")
+        return value
+
+    @model_validator(mode="after")
+    def validate_hours(self):
+        if not self.open_24_hours:
+            if not self.opens_at or not self.closes_at:
+                raise ValueError("Opening and closing time are required")
+            if self.opens_at >= self.closes_at:
+                raise ValueError("Closing time must be after opening time")
+        if bool(self.lab_opens_at) != bool(self.lab_closes_at):
+            raise ValueError("Set both lab opening and closing time, or neither")
+        if self.lab_opens_at and self.lab_opens_at >= self.lab_closes_at:
+            raise ValueError("Lab closing time must be after opening time")
+        return self

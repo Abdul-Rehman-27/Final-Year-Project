@@ -1,5 +1,7 @@
+import { QRCodeSVG } from "qrcode.react";
 import { renderToStaticMarkup } from "react-dom/server";
 import css from "./doctor-print.css?inline";
+import { buildPatientQrValue } from "../../../utils/qr.js";
 import { openPrintWindow } from "./printWindow.js";
 
 function parts(value, options, timezone) {
@@ -68,6 +70,8 @@ function PatientProfileDocument({ profile, doctor, hospital }) {
         <tbody>{appointments.map((item) => <tr key={item.id}><td dir="ltr">{displayAppointment(item.starts_at, hospital?.timezone)}</td><td>{item.doctor_name || "—"}</td><td>{item.department || "—"}</td><td>{displayStatus(appointmentStatus(item))}</td></tr>)}</tbody>
       </table>
       {allAppointments.length > appointments.length && <p className="patient-profile-truncated">Showing the most recent 12.</p>}
+      {/* NEW: QR for the patient profile document */}
+      {profile.id != null && <div className="print-qr print-qr--profile"><QRCodeSVG value={buildPatientQrValue({ patientId: profile.id })} size={72} level="M" fgColor="#0F2A27" bgColor="#FFFFFF" marginSize={2} role="img" aria-label={`Patient ${profile.id}`} /></div>}
       <footer className="print-foot patient-profile-foot"><span>Computer-generated document · Confidential patient information</span></footer>
     </main>
   );

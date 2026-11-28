@@ -1,13 +1,21 @@
 import { useSearchParams } from "react-router-dom";
-import RadiologyReportPdf from "../../../components/patient/print/RadiologyReportPdf.jsx";
+import LoadState from "../../../components/patient/LoadState.jsx";
 import PrintShell from "../../../components/patient/print/PrintShell.jsx";
+import RadiologyReportPdf from "../../../components/patient/print/RadiologyReportPdf.jsx";
 import { useLanguage } from "../../../context/LanguageContext.jsx";
-import { LAB_REPORTS } from "../../../data/mockPatient.js";
+import { useAsync } from "../../../hooks/useAsync.js";
+import { useReportImages } from "../../../hooks/useReportImages.js";
+import { patientPortalService } from "../../../services/patientPortalService.js";
+import { labDetailView } from "../../../utils/patientAdapters.js";
 
-/** Props: none; selects a radiology report and renders its printable A4 document. */
+/** Reads ?id=<lab report id>; renders the printable radiology report (with images) from live data. */
 export default function RadiologyReportPage() {
-  const { t } = useLanguage();
-  const [searchParams] = useSearchParams();
-  const report = LAB_REPORTS.find((item) => item.id === searchParams.get("id") && item.pdf === "radiology-report") || LAB_REPORTS.find((item) => item.id === "chest-xray");
-  return <PrintShell title={t("patient.print.radiology.documentTitle").replace("{reportNo}", report.reportNo)} size="A4"><RadiologyReportPdf report={report} /></PrintShell>;
+  const { t, lang } = useLanguage();
+  const [params] = useSearchParams();
+  const id = params.get("id");
+  const { data, error, loading, reload } = useAsync(() => patientPortalService.getLabReport(id), [id]);
+  const view = data ? labDetailView(data, lang) : null;
+  const images = useReportImages(id, view?.files);
+  const report = view ? { ...view, images } : null;
+  return <LoadState loading={loading} error={error} onRetry={reload} hasData={!!report}>{report && <PrintShell title={t("patient.print.radiology.documentTitle").replace("{reportNo}", report.reportNo)} size="A4"><RadiologyReportPdf report={report} /></PrintShell>}</LoadState>;
 }

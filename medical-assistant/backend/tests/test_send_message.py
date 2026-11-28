@@ -16,7 +16,7 @@ NO_DATA_TEXTS = {api.no_data_message("english"), api.no_data_message("urdu"), ap
 calls = []
 
 
-async def fake_chat(messages, max_tokens=700, json_mode=False):
+async def fake_chat(messages, max_tokens=700, json_mode=False, **_options):  # NEW: route also passes provider/model options
     # Stand-in for the real model. It records what the model was sent.
     calls.append({"messages": messages, "max_tokens": max_tokens})
     return {"text": "MODEL ANSWER", "usage": {}, "provider": "fake", "model": "fake"}
@@ -59,14 +59,15 @@ def test_history_is_oldest_first_and_skips_canned_replies():
             conn.execute("INSERT INTO messages(conversation_id, role, content) VALUES (?, 'assistant', ?)", (conversation_id, api.NO_DATA))
         calls.clear()
         send(client, conversation_id, ROMAN_CHILD)
-        history = calls[0]["messages"][2:]
+        # NEW: the route appends system notes (language, reply_to) after the history; only chat turns are checked here.
+        history = [item for item in calls[0]["messages"][2:] if item["role"] != "system"]
         assert history[0]["content"] == "hye"
         assert history[-1]["content"] == ROMAN_CHILD
         assert all(item["content"] != api.NO_DATA for item in history)
 
 
 def test_empty_model_reply_is_not_the_no_data_message():
-    async def empty_chat(messages, max_tokens=700, json_mode=False):
+    async def empty_chat(messages, max_tokens=700, json_mode=False, **_options):
         return {"text": "", "usage": {}, "provider": "fake", "model": "fake"}
 
     api.chat = empty_chat
